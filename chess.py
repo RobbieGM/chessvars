@@ -1,5 +1,5 @@
 #!/usr/bin/python
-DEBUG = False
+DEBUG = True
 
 from bottle import route, request, response, redirect, Bottle, abort, static_file
 from random import choice
@@ -264,7 +264,7 @@ def socket():
 					print "deleted dead socket(s)"
 					if len(logged_in_users[initial_session_token].sockets) == 0:
 						print "user closed final socket, deleting user"
-						for i in xrange(len(game_offers), -1, -1):
+						for i in xrange(len(game_offers)-1, -1, -1):
 							if game_offers[i].offered_by == logged_in_users[initial_session_token].username:
 								print "deleted user game offer (user logged out)"
 								del game_offers[i]
