@@ -1,7 +1,16 @@
 #!/usr/bin/python
-DEBUG = True
 
-from bottle import route, request, response, redirect, Bottle, abort, static_file
+# TODO (1):
+# ACTUALLY GET TO PLAY CHESS!
+
+DEBUG = False
+NORMAL = 0
+CHECK = 1
+CHECKMATE = 2
+STALEMATE = 3
+from time import sleep
+import Chessnut
+from bottle import request, response, redirect, Bottle, abort, static_file, debug
 from random import choice
 import re
 from gevent_websocket.geventwebsocket import WebSocketError
@@ -12,7 +21,6 @@ app = Bottle()
 import os
 import subprocess
 from cgi import escape
-
 def generate_session_token():
 	ALLOWED_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890" # Shouldn't use: /&?%\;"':
 	SESSION_TOKEN_LENGTH = 20
@@ -38,7 +46,6 @@ def main_page_wrap(html, css=''):
 		<div id="main">
 		'''+html+'''
 		</div>
-
 		<div id="modal-overlay" class="inactive"></div>
 		<div id="modal-dialog" class="inactive"><div id="modal-dialog-wrapper">
 			<div id="modal-dialog-content"></div>
@@ -47,27 +54,27 @@ def main_page_wrap(html, css=''):
 		</div>
 	</body>
 	</html>'''
-
+game_page_file = open("game.html", "r")
+game_page = game_page_file.read()
 terms_file = open("terms.txt", "r")
 terms_and_conditions = terms_file.read()
-
 class Admin:
 	def __init__(self, uname, pswd):
 		self.uname = uname
 		self.pswd = pswd
-
-admins = [Admin("RobbieM", "utf8")] # user-pass admin list
+admins = [Admin("RobbieM", "utf8"), Admin("KatieM", "Percy2014"), Admin("ParkerS", "capjacksparrow45"), Admin("JosephW", "Arman@2003")] # user-pass admin list
 admin_usernames = ["RobbieM"] # quick-scan list of admin usernames
 logged_in_users = {} # logged in users list, these represent username/session-token pairs. These are deleted when a ping request is not met with an echo.
 game_offers = []
+games = {}
 def session_exists(token):
 	if not token:
 		return False
 	return token in logged_in_users
 def username_required(func):
-	def wrapper():
+	def wrapper(**args):
 		if session_exists(request.get_cookie("session_token")):
-			return func()
+			return func(**args)
 		else:
 			redirect("/choose_username")
 	return wrapper
@@ -77,72 +84,91 @@ def token_has_socket(session_token, socket):
 			return True
 	return False
 class GameOffer:
-	def __init__(self, offered_by, variant, minutes, delay, play_as, game_id):
+	def __init__(self, offered_by, variant, minutes, delay, play_as, game_id, offered_by_session):
 		self.offered_by = offered_by
 		self.variant = variant
 		self.minutes = minutes
 		self.delay = delay
 		self.play_as = play_as
 		self.game_id = game_id
+		self.offered_by_session = offered_by_session
+class Game:
+	def __init__(self, white_player, black_player, variant, minutes, delay, game_id):
+		self.white_player = white_player
+		self.black_player = black_player
+		self.variant = variant
+		self.minutes = minutes
+		self.delay = delay
+		self.game_id = game_id
 class LoggedInUser:
-	def __init__(self, username):
+	def __init__(self, username, session_token):
 		self.username = username
 		self.sockets = []
-
-def tablify_game_offers():
-	rows = ""
-	def switch_bw(c):
+		self.session_token = session_token # for quick reference by logged_in_users[self.session_token]
+		self.game_id = None
+	def logout(self, force=True):
+		if force or len(self.sockets) == 0:
+			for i in xrange(len(game_offers)-1, -1, -1):
+				if game_offers[i].offered_by == self.username:
+					del game_offers[i]
+			try:
+				del logged_in_users[self.session_token]
+			except:
+				pass # user already deleted
+	def start_logout_timer(self):
+		self.logout_timer = Timer(5, self.logout, [False])
+		self.logout_timer.daemon = True
+		self.logout_timer.start()
+	def on_socket_close(self):
+		if len(self.sockets) == 0:
+			self.start_logout_timer()
+def switch_bw(c):
 		if c == "white":
 			return "black"
 		if c == "black":
 			return "white"
 		return c
+def tablify_game_offers(username):
+	rows = ""
 	for i in range(len(game_offers)):
-		rows += "<tr><td>"+game_offers[i].offered_by+"</td><td>"+game_offers[i].variant+"</td><td>"+game_offers[i].minutes+"min + "+game_offers[i].delay+"sec</td><td>"+switch_bw(game_offers[i].play_as)+"</td><td><button material raised>Accept Game</button></td></tr>"
+		word = "Withdraw" if username == game_offers[i].offered_by else "Accept"
+		clr = game_offers[i].play_as if username == game_offers[i].offered_by else switch_bw(game_offers[i].play_as)
+		rows += "<tr id='game-id-"+game_offers[i].game_id+"'><td>"+game_offers[i].offered_by+"</td><td>"+game_offers[i].variant+"</td><td>"+game_offers[i].minutes+"min + "+game_offers[i].delay+"sec</td><td>"+clr+"</td><td><button material raised onclick=\"CVAcceptGame('"+game_offers[i].game_id+"')\">"+word+" Game</button></td></tr>"
 	return rows
 def get_token_by_socket(socket):
 	for token in logged_in_users:
 		if token_has_socket(token, socket):
 			return token
 	return None
-def broadcast_to(message, recipients):
+def broadcast_to(from_token, message, recipients, signify_owned=False):
+	if DEBUG:
+		print "from_token: "+from_token
+		print "message: "+message
+		print "recipients: "+recipients
+		print "signify_owned: "+str(signify_owned)
 	for session_token in logged_in_users:
 		if session_token in recipients or recipients == "all":
 			for i in range(len(logged_in_users[session_token].sockets)):
-				logged_in_users[session_token].sockets[i].send(message)
+				is_owned = from_token == session_token
+				extra = None
+				if signify_owned:
+					extra = ":owned" if is_owned else ":foreign"
+				else:
+					extra = ""
+				logged_in_users[session_token].sockets[i].send(message+extra)
 def get_token_by_username(username):
 	for token in logged_in_users:
 		if logged_in_users[token].username == username:
 			return token
 	return None
+def delete_game(game_id):
+	broadcast_to("FROM_SERVER", "withdrawgame:"+game_id, "all")
+	for i in xrange(len(game_offers)-1, -1, -1):
+		if game_offers[i].game_id == game_id:
+			del game_offers[i]
 ICON_SIZE = str(40)
-@app.route('/')
-@username_required
-def index():
-	uname = logged_in_users[request.get_cookie("session_token")].username
-	return main_page_wrap('''
-		<table class="splitter-table"><tbody><tr>
-		<td>
-			<h2>Welcome, '''+uname+'''</h2>
-			<p>Don't like your current username? <a href="/choose_username">Repick it</a></p>
-			
-		</td>
-		<td>
-			<h2>Open Games</h2>
-			<table class="cv-table"><thead>
-			<th>
-			<tr><td>Player</td><td>Variant</td><td>Time Control</td><td>Play as</td><td>Action</td></tr>
-			</th></thead>
-			<tbody id="games-tbody">
-			'''+str(tablify_game_offers())+'''
-			</tbody>
-			<tfoot>
-			<tr><td colspan="5"><button raised material button onclick="CVCreateGame()">Create a Game...</button></td></tr>
-			</tfoot>
-			</table>
-		</td>
-		</tr></tbody></table>
-		<div material raised id="option-icon-container" class="option">
+hamburger_menu = '''
+<div material raised id="option-icon-container" class="option">
 			<a class="navicon-button x t-icon"><div class="navicon"></div></a>
 		</div>
 		<a href="/settings"><div material class="option" id="option-1" raised>
@@ -154,7 +180,33 @@ def index():
 		<a href="/choose_username"><div material class="option" id="option-3" raised>
 			<img src="/resources/ic_undo_black_24px.svg" width="'''+ICON_SIZE+'''px" height="'''+ICON_SIZE+'''px"/>
 		</div></a>
-		''')
+'''
+@app.route('/')
+@username_required
+def index():
+	uname = logged_in_users[request.get_cookie("session_token")].username
+	return main_page_wrap('''
+		<table class="splitter-table"><tbody><tr>
+		<td>
+			<h2>Welcome, '''+uname+'''</h2>
+			<p>Don't like your current username? <a href="/choose_username">Repick it</a></p>
+		</td>
+		<td>
+			<h2>Open Games</h2>
+			<table class="cv-table"><thead>
+			<th>
+			<tr><td>Player</td><td>Variant</td><td>Time Control</td><td>Play as</td><td>Action</td></tr>
+			</th></thead>
+			<tbody id="games-tbody">
+			'''+str(tablify_game_offers(uname))+'''
+			</tbody>
+			<tfoot>
+			<tr><td colspan="5"><button raised material button onclick="CVCreateGame()">Create a Game...</button></td></tr>
+			</tfoot>
+			</table>
+		</td>
+		</tr></tbody></table>
+		'''+hamburger_menu)
 @app.route('/settings')
 def settings():
 	return main_page_wrap('''
@@ -183,13 +235,18 @@ def settings():
 		''')
 @app.route('/choose_username')
 def choose_uname():
+	orig_session_token = request.get_cookie('session_token')
+	response.delete_cookie('session_token')
+	try:
+		current_user = logged_in_users[request.get_cookie('session_token')]
+		current_user.logout(current_user, force=True)
+	except:
+		pass
 	return main_page_wrap('''<h2>Choose your temporary username to play</h2>
 		<form action="/choose_username" method="POST">
 			<input type="text" name="username" autofocus required placeholder="johndoe123" maxlength="20"/><br/>
-
 			<input type="password" name="password" id="password" class="hidden_password" placeholder="aDm1n-p@s$w0RD"/>
 			<input type="checkbox" name="is_admin" id="is_admin"/><label for="is_admin">Log in as admin</label><br/>
-
 			<button material colored raised button type="submit" id="choose_username">PICK USERNAME</button
 			><button material raised button type="button" onclick='CVAlert("'''+terms_and_conditions+'''");'>TERMS & CONDITIONS</button>
 		</form>''')
@@ -230,8 +287,8 @@ def save_uname():
 		if not credentials_correct:
 			return main_page_wrap("<h2>Could not log in</h2><p>Administrator login credentials are incorrect.<a href='/choose_username'>Repick</a></p>")
 	random_session_token = generate_session_token()
-	response.set_cookie("session_token", random_session_token)
-	logged_in_users[random_session_token] = LoggedInUser(temp_uname)
+	response.set_cookie("session_token", random_session_token, httponly="on")
+	logged_in_users[random_session_token] = LoggedInUser(temp_uname, random_session_token)
 	redirect("/")
 @app.route('/people')
 @username_required
@@ -239,7 +296,7 @@ def view_people():
 	return main_page_wrap('''
 		<h2>People online</h2>
 		<h4>Keep in mind that the temporary username system allows usernames to be picked and chosen at each session, so one person you saw earlier may have a different username now.</h4>
-		''')
+		'''+hamburger_menu)
 @app.route('/socket')
 @username_required
 def socket():
@@ -247,12 +304,12 @@ def socket():
 	if not socket:
 		abort(400, "Expected WebSocket request.")
 	initial_session_token = request.get_cookie("session_token")
-	'''def ping():
-		print "ping request functionality unavailable."
-		Timer(30, ping).start()
-	ping()'''
 	logged_in_users[initial_session_token].sockets.append(socket)
-	def ping_socket():
+	if logged_in_users[initial_session_token].game_id in games:
+		def send_initial_fen():
+			socket.send("fen:rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR:newboard")
+		Timer(3, send_initial_fen).start()
+	'''def ping_socket():
 		try:
 			socket.send("testsocket")
 		except Exception as e:
@@ -273,50 +330,114 @@ def socket():
 			t = Timer(5, ping_socket)
 			t.daemon = True
 			t.start()
-	ping_socket()
+	ping_socket()'''
 	while True:
 		try:
 			msg = socket.receive()
-			# if msg == None, there was no message. If error, the connection was terminated.
+			new_session_token = get_token_by_socket(socket)
+			if new_session_token != initial_session_token:
+				print "Session token linked to a socket changed."
+			# if msg == None, then connection terminated
 			if not msg:
-				return
+				for i in xrange(len(logged_in_users[new_session_token].sockets)-1, -1, -1):
+					if logged_in_users[new_session_token].sockets[i] is socket:
+						del logged_in_users[new_session_token].sockets[i]
+				logged_in_users[new_session_token].on_socket_close()
+				abort(400, "Connection closed.")
 			msg_args = msg.split(":")
 			print msg_args
 			if msg_args[0] == 'creategame':
-				if session_exists(get_token_by_socket(socket)):
+				if session_exists(new_session_token):
 					game_id = generate_session_token()
-					game_offers.append(GameOffer(logged_in_users[get_token_by_socket(socket)].username, msg_args[1], msg_args[2], msg_args[3], msg_args[4], game_id))
-					broadcast_to("newgame:"+logged_in_users[get_token_by_socket(socket)].username+":"+msg_args[1]+":"+msg_args[2]+":"+msg_args[3]+":"+msg_args[4]+":"+game_id, "all")
+					game_offers.append(GameOffer(logged_in_users[new_session_token].username, msg_args[1], msg_args[2], msg_args[3], msg_args[4], game_id, new_session_token))
+					broadcast_to(new_session_token, "newgame:"+logged_in_users[new_session_token].username+":"+msg_args[1]+":"+msg_args[2]+":"+msg_args[3]+":"+switch_bw(msg_args[4])+":"+game_id, "all", signify_owned=True)
 				else:
 					print "weird error."
+			if msg_args[0] == 'acceptgame': # Remember, acceptgame means withdraw game if game is 'accepted' by creator of that game!
+				found = False
+				for i in xrange(len(game_offers)-1, -1, -1):
+					if game_offers[i].game_id == msg_args[1]:
+						found = True
+						# this is the game you are looking for
+						if game_offers[i].offered_by == logged_in_users[new_session_token].username:
+							# Withdraw, not accept (that would be weird to accept your own game.)
+							delete_game(game_offers[i].game_id)
+						else:
+							# Accept game
+							logged_in_users[new_session_token].game_id = game_offers[i].game_id
+							logged_in_users[game_offers[i].offered_by_session].game_id = game_offers[i].game_id
+							socket.send("gameready:"+game_offers[i].game_id)
+							for sock in logged_in_users[game_offers[i].offered_by_session].sockets: # Notify game creator on all sockets
+								sock.send('gameaccepted:'+game_offers[i].game_id)
+							offered_by  = game_offers[i].offered_by
+							accepted_by = logged_in_users[new_session_token].username
+							print game_offers[i].play_as
+							if game_offers[i].play_as != "white" and game_offers[i].play_as != "black":
+								game_offers[i].play_as = choice(["white", "black"]) 
+							white_player = offered_by if game_offers[i].play_as == "white" else accepted_by
+							black_player = offered_by if game_offers[i].play_as == "black" else accepted_by
+							games[game_offers[i].game_id] = Game(white_player, black_player, game_offers[i].variant, game_offers[i].minutes, game_offers[i].delay, game_offers[i].game_id)
+							delete_game(game_offers[i].game_id)
+				if not found:
+					socket.send('showmessage:<h3>Game Unavailable</h3><p>Sorry, this game is no longer available. This could be caused by a slow internet connection or by a bug in our server.</p>')
+			if msg_args[0] == 'game':
+				if logged_in_users[new_session_token].game_id in games:
+					pass # There's a game here for sure
+				else:
+					pass # They're sending game moves without a game. Suspicious? Maybe, but possibly just a laggy internet or glitch.
 			session_token = request.get_cookie("session_token")
-		except Exception as e:
-			print e
-			if str(e) == "Connection is already closed":
-				for i in range(len(logged_in_users[initial_session_token].sockets)):
-					if logged_in_users[initial_session_token].sockets[i] is socket:
-						del logged_in_users[initial_session_token].sockets[i]
-				abort(400, "Connection terminated.")
-			else:
-				print "WebSocketError: "+str(e)
+		except WebSocketError as e:
+			for i in xrange(len(logged_in_users[new_session_token].sockets)-1, -1, -1):
+				if logged_in_users[new_session_token].sockets[i] is socket:
+					del logged_in_users[new_session_token].sockets[i]
+			logged_in_users[new_session_token].on_socket_close()
+			abort(400, "Connection closed.")
+@app.route('/g/<game_id>')
+@username_required
+def game_page_func(game_id):
+	try:
+		game = games[game_id]
+		current_user = logged_in_users[request.get_cookie('session_token')]
+		spectating = current_user.game_id != game_id
+		if spectating:
+			return main_page_wrap('''
+				<h2>Game in progress</h2>
+				<p>This game is already being played. Spectating functionality is not implemented right now.</p>
+				''')
+		return main_page_wrap(game_page.format(white_player=game.white_player, black_player=game.black_player, variant=game.variant, hamburger_menu=hamburger_menu))
+	except KeyError:
+		return main_page_wrap('''
+			<h2>Game unavailable</h2>
+			<p>Sorry, this game is no longer available. This could be caused by a slow internet connection or by a bug in our server.</p>
+			''')
 @app.route('/main.css')
 def get_main_css():
 	return static_file("main.css", root="/Users/rmoore/code")
 @app.route('/main.js')
 def get_main_js():
 	return static_file("main.js", root="/Users/rmoore/code")
+@app.route('/game.js')
+def get_game_js():
+	return static_file("game.js", root="/Users/rmoore/code")
 @app.route('/resources/<resource>')
 def get_resource(resource):
 	return static_file(resource, root="/Users/rmoore/code/resources")
-from pprint import pprint
-def debug():
+@app.error(404)
+def error_404(error):
+	return main_page_wrap('''
+		<h2>Page not found (404)</h2>
+		<p>This page was not found (it may have moved). Sorry.</p>
+		''')
+def debug_manually():
+	print "-----------------------------------"
 	for session_token in logged_in_users:
 		print "debug: "+str(logged_in_users[session_token].__dict__)
-	d = Timer(5, debug)
+	d = Timer(5, debug_manually)
 	d.daemon = True
 	d.start()
 if DEBUG:
-	debug()
+	debug_manually()
+	debug(True)
 ipaddr = "localhost"
 try:
 	ipaddr = (subprocess.check_output("ipconfig getifaddr en1", shell=True))[:-1]
