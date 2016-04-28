@@ -1,13 +1,19 @@
-<table class="splitter-table">
+<table class='splitter-table'>
 	<tr>
 		<td></td>
-		<td id="chess-board-container">
-			<canvas id="chess-board" z="2"></canvas>
+		<td id='chess-board-container'>
+			<canvas id='chess-board' z='2'></canvas>
 		</td>
 		<td>
 			<!-- Add vertically aligned (lichess-style) player data stuff. -->
+			<h3>{white_player} vs. {black_player}</h3>
+			<button material raised id='rotate-board'>Rotate board</button>
 		</td>
 	</tr>
 </table>
+<var style='display:none' id='white-player'>{white_player}</var>
+<var style='display:none' id='black-player'>{black_player}</var>
+<var style='display:none' id='username'>{username}</var>
+<var style='display:none' id='opponent-username'>{opponent_username}</var>
 {hamburger_menu}
-<script src="/game.js"></script>
+<script src='/game.js'></script>
