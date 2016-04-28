@@ -1,7 +1,9 @@
 #!/usr/bin/python
 
-# TODO (1):
+# TODO (3):
 # ACTUALLY GET TO PLAY CHESS!
+# Fix browser bugs
+# Board flipping
 
 DEBUG = False
 NORMAL = 0
@@ -100,6 +102,7 @@ class Game:
 		self.minutes = minutes
 		self.delay = delay
 		self.game_id = game_id
+		self.cn_game = Chessnut.Game()
 class LoggedInUser:
 	def __init__(self, username, session_token):
 		self.username = username
@@ -252,11 +255,12 @@ def choose_uname():
 		</form>''')
 @app.route('/choose_username', method="POST")
 def save_uname():
-	temp_uname = escape(request.forms.get("username"))
+	orig_temp_uname = request.forms.get("username")
+	temp_uname = escape(orig_temp_uname)
 	admin_pass = request.forms.get("password")
 	admin_login_attempt = request.forms.get("is_admin")
 	offensive_language = ["666", "69", "ass", "bitch", "balls", "biotch", "bollock", "biatch", "biutch", "boob", "cunt", "dick", "dieck", "damn", "fuck", "hell", "intercourse", "nigger", "nigga", "pussy", "penis", "piss", "shit", "shiat", "shait", "shiut", "sex", "slag", "vagina", "wanker"]
-	if len(temp_uname) > 20:
+	if len(orig_temp_uname) > 20:
 		return main_page_wrap('''<h2>Could not choose username</h2><p>The username is you have chosen is too long.
 			<strong><em>Having fun with the 'inspect element' feature in your browser? Remember, hacking will get you banned!</em></strong>''')
 	if True in [liu.username == temp_uname for liu in logged_in_users.values()]: # another user already has this username
@@ -266,7 +270,7 @@ def save_uname():
 	for obscenity in offensive_language:
 		if obscenity in temp_uname.lower():
 			return main_page_wrap("<h2>Could not choose username</h2><p>This username is offensive or vulgar. <a href='/choose_username'>Repick</a></p>")
-	if re.search("<script>", temp_uname) or re.search("<\w+?>.*?<\/\w+?>", temp_uname):
+	if re.search("<script>", orig_temp_uname) or re.search("<\w+?>.*?<\/\w+?>", orig_temp_uname):
 		return main_page_wrap('''<h2>Could not choose username</h2><p>Username must only contain letters, numbers, dashes, and spaces.
 			<strong><em>Testing for Cross-Site Scripting? Remember, hacking will get you banned!</em></strong></p>''')
 	try:
@@ -306,9 +310,10 @@ def socket():
 	initial_session_token = request.get_cookie("session_token")
 	logged_in_users[initial_session_token].sockets.append(socket)
 	if logged_in_users[initial_session_token].game_id in games:
-		def send_initial_fen():
-			socket.send("fen:rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR:newboard")
-		Timer(3, send_initial_fen).start()
+		cn_game = games[logged_in_users[initial_session_token].game_id].cn_game
+		def send_fen():
+			socket.send("fen:"+cn_game.fen_history[-1:][0]+":newboard") # fen:rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR:newboard
+		Timer(0.3, send_fen).start()
 	'''def ping_socket():
 		try:
 			socket.send("testsocket")
@@ -347,42 +352,70 @@ def socket():
 			msg_args = msg.split(":")
 			print msg_args
 			if msg_args[0] == 'creategame':
-				if session_exists(new_session_token):
-					game_id = generate_session_token()
-					game_offers.append(GameOffer(logged_in_users[new_session_token].username, msg_args[1], msg_args[2], msg_args[3], msg_args[4], game_id, new_session_token))
-					broadcast_to(new_session_token, "newgame:"+logged_in_users[new_session_token].username+":"+msg_args[1]+":"+msg_args[2]+":"+msg_args[3]+":"+switch_bw(msg_args[4])+":"+game_id, "all", signify_owned=True)
+				if logged_in_users[new_session_token].game_id in games:
+					socket.send('showmessage:<h3>You are already in a game</h3><p>Please finish the game you are in before you accept another game.</p>')
 				else:
-					print "weird error."
+					if session_exists(new_session_token):
+						game_id = generate_session_token()
+						game_offers.append(GameOffer(logged_in_users[new_session_token].username, msg_args[1], msg_args[2], msg_args[3], msg_args[4], game_id, new_session_token))
+						broadcast_to(new_session_token, "newgame:"+logged_in_users[new_session_token].username+":"+msg_args[1]+":"+msg_args[2]+":"+msg_args[3]+":"+switch_bw(msg_args[4])+":"+game_id, "all", signify_owned=True)
+					else:
+						print "weird error."
 			if msg_args[0] == 'acceptgame': # Remember, acceptgame means withdraw game if game is 'accepted' by creator of that game!
-				found = False
-				for i in xrange(len(game_offers)-1, -1, -1):
-					if game_offers[i].game_id == msg_args[1]:
-						found = True
-						# this is the game you are looking for
-						if game_offers[i].offered_by == logged_in_users[new_session_token].username:
-							# Withdraw, not accept (that would be weird to accept your own game.)
-							delete_game(game_offers[i].game_id)
-						else:
-							# Accept game
-							logged_in_users[new_session_token].game_id = game_offers[i].game_id
-							logged_in_users[game_offers[i].offered_by_session].game_id = game_offers[i].game_id
-							socket.send("gameready:"+game_offers[i].game_id)
-							for sock in logged_in_users[game_offers[i].offered_by_session].sockets: # Notify game creator on all sockets
-								sock.send('gameaccepted:'+game_offers[i].game_id)
-							offered_by  = game_offers[i].offered_by
-							accepted_by = logged_in_users[new_session_token].username
-							print game_offers[i].play_as
-							if game_offers[i].play_as != "white" and game_offers[i].play_as != "black":
-								game_offers[i].play_as = choice(["white", "black"]) 
-							white_player = offered_by if game_offers[i].play_as == "white" else accepted_by
-							black_player = offered_by if game_offers[i].play_as == "black" else accepted_by
-							games[game_offers[i].game_id] = Game(white_player, black_player, game_offers[i].variant, game_offers[i].minutes, game_offers[i].delay, game_offers[i].game_id)
-							delete_game(game_offers[i].game_id)
-				if not found:
-					socket.send('showmessage:<h3>Game Unavailable</h3><p>Sorry, this game is no longer available. This could be caused by a slow internet connection or by a bug in our server.</p>')
+				if logged_in_users[new_session_token].game_id in games:
+					socket.send('showmessage:<h3>You are already in a game</h3><p>Please finish the game you are in before you accept another game.</p>')
+				else:
+					found = False
+					for i in xrange(len(game_offers)-1, -1, -1):
+						if game_offers[i].game_id == msg_args[1]:
+							found = True
+							# this is the game you are looking for
+							if game_offers[i].offered_by == logged_in_users[new_session_token].username:
+								# Withdraw, not accept (that would be weird to accept your own game.)
+								delete_game(game_offers[i].game_id)
+							else:
+								# Accept game
+								logged_in_users[new_session_token].game_id = game_offers[i].game_id
+								logged_in_users[game_offers[i].offered_by_session].game_id = game_offers[i].game_id
+								socket.send("gameready:"+game_offers[i].game_id)
+								for sock in logged_in_users[game_offers[i].offered_by_session].sockets: # Notify game creator on all sockets
+									sock.send('gameaccepted:'+game_offers[i].game_id)
+								offered_by  = game_offers[i].offered_by
+								accepted_by = logged_in_users[new_session_token].username
+								if game_offers[i].play_as != "white" and game_offers[i].play_as != "black":
+									game_offers[i].play_as = choice(["white", "black"]) 
+								white_player = offered_by if game_offers[i].play_as == "white" else accepted_by
+								black_player = offered_by if game_offers[i].play_as == "black" else accepted_by
+								games[game_offers[i].game_id] = Game(white_player, black_player, game_offers[i].variant, game_offers[i].minutes, game_offers[i].delay, game_offers[i].game_id)
+								delete_game(game_offers[i].game_id)
+					if not found:
+						socket.send('showmessage:<h3>Game Unavailable</h3><p>Sorry, this game is no longer available. This could be caused by a slow internet connection or by a bug in our server.</p>')
 			if msg_args[0] == 'game':
 				if logged_in_users[new_session_token].game_id in games:
-					pass # There's a game here for sure
+					# There's a game here for sure
+					game = games[logged_in_users[new_session_token].game_id]
+					if msg_args[1] == 'move':
+						try:
+							if not msg_args[2] in game.cn_game.get_moves():
+								raise Chessnut.game.InvalidMove
+							if (game.cn_game.state.player == 'w' and logged_in_users[new_session_token].username == game.white_player) or (game.cn_game.state.player == 'b' and logged_in_users[new_session_token].username == game.black_player):
+								game.cn_game.apply_move(msg_args[2])
+							else:
+								raise Chessnut.game.OpponentsTurn
+						except Chessnut.game.InvalidMove:
+							socket.send('illegalmove')
+						except Chessnut.game.OpponentsTurn:
+							socket.send('opponentsturn')
+						else:
+							socket.send("fen:"+cn_game.fen_history[-1:][0]+":newboard")
+							if logged_in_users[new_session_token].username == game.white_player:
+								for sock in logged_in_users[get_token_by_username(game.black_player)].sockets:
+									sock.send("fen:"+cn_game.fen_history[-1:][0]+":newboard")
+							elif logged_in_users[new_session_token].username == game.black_player:
+								for sock in logged_in_users[get_token_by_username(game.white_player)].sockets:
+									sock.send("fen:"+cn_game.fen_history[-1:][0]+":newboard")
+							else:
+								pass # Player is in a game but not white or black? Weird. Possibly hacking
 				else:
 					pass # They're sending game moves without a game. Suspicious? Maybe, but possibly just a laggy internet or glitch.
 			session_token = request.get_cookie("session_token")
@@ -404,7 +437,12 @@ def game_page_func(game_id):
 				<h2>Game in progress</h2>
 				<p>This game is already being played. Spectating functionality is not implemented right now.</p>
 				''')
-		return main_page_wrap(game_page.format(white_player=game.white_player, black_player=game.black_player, variant=game.variant, hamburger_menu=hamburger_menu))
+		opponent = 'Error in lines 426-430 in finding opponent username'
+		if game.white_player == current_user.username:
+			opponent = game.black_player
+		if game.black_player == current_user.username:
+			opponent = game.white_player
+		return main_page_wrap(game_page.format(white_player=game.white_player, black_player=game.black_player, username=current_user.username, opponent_username=opponent, variant=game.variant, hamburger_menu=hamburger_menu))
 	except KeyError:
 		return main_page_wrap('''
 			<h2>Game unavailable</h2>
