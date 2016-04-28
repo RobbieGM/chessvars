@@ -1,78 +1,93 @@
+// JavaScript Safari bug to fix! [material] buttons won't press unless held or double-clicked.
+
 console.log("%cCaution", "font: bold 35pt sans-serif; color: red;");
 console.log("%cEven though we use a temporary username system and there is not much to lose (e.g., account passwords), pasting text here may give scammers or hackers access \
 to your Chessvars in-browser settings or worse your session id. Your session id could give them the ability to play your games or send messages as 'you'.",
 	"font: 12pt georgia, serif;");
-
-addEventListener('load', function() {
-try {
-document.getElementById("is_admin").onchange = function() {
-	if (this.checked) {
-		document.getElementById("password").classList.add("show");
-		document.getElementById("choose_username").value = "LOG IN";
-	}else{
-		document.getElementById("password").classList.remove("show");
-		document.getElementById("choose_username").value = "PICK USERNAME";
+(function initLocalStorage() {
+	var idealLocalStorage = {
+		darkSquareColor: "#555555",
+		lightSquareColor: "#EEEEEE"
+	};
+	for (key in idealLocalStorage) {
+		if (localStorage[key] === undefined || localStorage[key] === null) {
+			localStorage[key] = idealLocalStorage[key];
+		}
 	}
-};
-}catch(err) {
-	// not the login page, but whatever.
-}
-try {
-	document.getElementById("option-icon-container").onclick = function() {
-		for (var i = this.children.length - 1; i >= 0; i--) {
-			if (this.children[i].classList.toString().indexOf("t-icon") !== -1) {
-				this.children[i].classList.toggle("open");
+})();
+function activateMaterial() {
+	var addMultiListener = function(el, events, callback) {
+		var e = events.split(' ');
+		Array.prototype.forEach.call(el, function(element, i) {
+			Array.prototype.forEach.call(e, function(event, i) {
+				element.addEventListener(event, callback, false);
+			});
+		});
+	};
+	addMultiListener(document.querySelectorAll('[material]'), 'mousedown touchstart', function(e) {
+		var ripple = this.querySelector('.ripple');
+		var eventType = e.type;
+		if (ripple == null) {
+			ripple = document.createElement('span');
+			ripple.classList.add('ripple');
+			this.insertBefore(ripple, this.firstChild);
+			if (!ripple.offsetHeight && !ripple.offsetWidth) {
+				var size = Math.max(e.target.offsetWidth, e.target.offsetHeight);
+				ripple.style.width = size + 'px';
+				ripple.style.height = size + 'px';
 			}
 		}
-		var options = 3;
-		for (var i=1;i<=options;i++) {
-			document.getElementById("option-"+i).classList.toggle("open");
+		ripple.classList.remove('animate');
+		if (eventType == 'mousedown') {
+			var x = e.pageX;
+			var y = e.pageY;
+		} else if (eventType == 'touchstart') {
+			var x = e.changedTouches[0].pageX;
+			var y = e.changedTouches[0].pageY;
+		}
+		x = x - this.offsetLeft - ripple.offsetWidth / 2;
+		y = y - this.offsetTop - ripple.offsetHeight / 2;
+		ripple.style.top = y + 'px';
+		ripple.style.left = x + 'px';
+		ripple.classList.add('animate');
+	});
+}
+addEventListener('load', function() {
+	try {
+	document.getElementById("is_admin").onchange = function() {
+		if (this.checked) {
+			document.getElementById("password").classList.add("show");
+			document.getElementById("choose_username").value = "LOG IN";
+		}else{
+			document.getElementById("password").classList.remove("show");
+			document.getElementById("choose_username").value = "PICK USERNAME";
 		}
 	};
-}catch(err) {
-	// no option-icon-container present
-}
-
-var addMultiListener = function(el, events, callback) {
-	var e = events.split(' ');
-	Array.prototype.forEach.call(el, function(element, i) {
-		Array.prototype.forEach.call(e, function(event, i) {
-			element.addEventListener(event, callback, false);
-		});
-	});
-};
-addMultiListener(document.querySelectorAll('[material]'), 'mousedown touchstart', function(e) {
-	var ripple = this.querySelector('.ripple');
-	var eventType = e.type;
-	if (ripple == null) {
-		ripple = document.createElement('span');
-		ripple.classList.add('ripple');
-		this.insertBefore(ripple, this.firstChild);
-		if (!ripple.offsetHeight && !ripple.offsetWidth) {
-			var size = Math.max(e.target.offsetWidth, e.target.offsetHeight);
-			ripple.style.width = size + 'px';
-			ripple.style.height = size + 'px';
+	}catch(err) {
+		// not the login page, but whatever.
+	}
+	try {
+		document.getElementById("option-icon-container").onclick = function() {
+			for (var i = this.children.length - 1; i >= 0; i--) {
+				if (this.children[i].classList.toString().indexOf("t-icon") !== -1) {
+					this.children[i].classList.toggle("open");
+				}
+			}
+			var options = 3;
+			for (var i=1;i<=options;i++) {
+				document.getElementById("option-"+i).classList.toggle("open");
+			}
+		};
+	}catch(err) {
+		// no option-icon-container present
+	}
+	activateMaterial();
+	document.body.addEventListener("keyup", function(evt) {
+		if (evt.keyCode == 27) {
+			CVDismissAlert();
 		}
-	}
-	ripple.classList.remove('animate');
-	if (eventType == 'mousedown') {
-		var x = e.pageX;
-		var y = e.pageY;
-	} else if (eventType == 'touchstart') {
-		var x = e.changedTouches[0].pageX;
-		var y = e.changedTouches[0].pageY;
-	}
-	x = x - this.offsetLeft - ripple.offsetWidth / 2;
-	y = y - this.offsetTop - ripple.offsetHeight / 2;
-	ripple.style.top = y + 'px';
-	ripple.style.left = x + 'px';
-	ripple.classList.add('animate');
-});
-document.body.addEventListener("keyup", function(evt) {
-	if (evt.keyCode == 27) {
-		CVDismissAlert();
-	}
-});
+	});
+	// End onload
 });
 function CVAlert(content, buttons, defaultButton) {
 	if (!buttons || buttons.length === 0) { buttons = ["OK"]; defaultButton = "OK";}
@@ -90,6 +105,7 @@ function CVAlert(content, buttons, defaultButton) {
 			CVDismissAlert(this.innerHTML);
 		}
 	}
+	activateMaterial();
 }
 function CVDismissAlert(result) {
 	document.getElementById("modal-dialog").className = "inactive";
@@ -138,7 +154,13 @@ function CVCreateGame() {
 			var variant = document.getElementById("variant").value;
 			var minutes = document.getElementById("minutes").value;
 			var delay   = document.getElementById("delay").value;
-			var playAs  = document.forms[0]['play-as'].value;
+			var playAs  = "random";
+			var radioButtons = document.getElementsByName("play-as");
+			for (var i=0;i<radioButtons.length; i++) {
+				if (radioButtons[i].checked == true) {
+					playAs = radioButtons[i].value;
+				}
+			}
 			socket.send("creategame:"+variant+":"+minutes+":"+delay+":"+playAs);
 		}
 	};
@@ -149,19 +171,54 @@ function CVCreateGame() {
 		document.getElementById("minutes").onchange = function() { document.getElementById("display-minutes").innerHTML = this.value+"min"; };
 	}, 200);
 }
+var suppressOfflineMessages = false;
+setInterval(function() {
+	if (!navigator.onLine && !suppressOfflineMessages) {
+		CVAlert("<h3>Network Error</h3><p>We are unable to connect to the Chessvars server. Please check your internet connection.</p>")
+		onAlertDismiss = function() {
+			suppressOfflineMessages = true;
+		};
+	}
+}, 2000);
 function CVAcceptGame(gameId) {
-	console.log("Accepted game with ID "+gameId);	
+	socket.send("acceptgame:"+gameId)
 }
 var onAlertDismiss = function() { console.log("No action taken on alert dismiss. (default)"); };
 var socket = new WebSocket("ws://"+location.host+"/socket");
+var socketSend = socket.send;
+socket.send = function() {
+	socketSend.apply(this, arguments);
+};
 socket.onmessage = function(received) {
+	function switch_bw(c) {
+		if (c == "white") return "black";
+		if (c == "black") return "white";
+		return c;
+	}
 	var msg = received.data;
 	console.log("Received WS data: "+msg);
-	if (msg == "ping") {
-		socket.send("echo"); // Warning user: if you change this, the server may think you're not online and kick you off! :-D
-	}
 	var msgargs = msg.split(":");
 	if (msgargs[0] == "newgame") {
-		document.getElementById("games-tbody").innerHTML = "<tr></td><td>"+msgargs[1]+"</td><td>"+msgargs[2]+"</td><td>"+msgargs[3]+"min + "+msgargs[4]+"sec</td><td>"+msgargs[5]+"</td><td><button raised material button onclick='CVAcceptGame(\""+msgargs[6]+"\")'>Accept Game</button></td></tr>";
+		var word = (msgargs[7] == "owned") ? "Withdraw" : "Accept";
+		var playAs = (msgargs[7] == "owned") ? switch_bw(msgargs[5]) : msgargs[5];
+		document.getElementById("games-tbody").innerHTML += "<tr id='game-id-"+msgargs[6]+"'></td><td>"+msgargs[1]+"</td><td>"+msgargs[2]+"</td><td>"+msgargs[3]+"min + "+msgargs[4]+"sec</td><td>"+playAs+"</td><td><button raised material button onclick='CVAcceptGame(\""+msgargs[6]+"\")'>"+word+" Game</button></td></tr>";
+		activateMaterial();
+	}
+	if (msgargs[0] == "withdrawgame") {
+		try {
+			var elt = document.getElementById("game-id-"+msgargs[1]);
+			elt.parentNode.removeChild(elt);
+		}catch(err) {}
+	}
+	if (msgargs[0] == "showmessage") {
+		CVAlert(msgargs[1])
+	}
+	if (msgargs[0] == "gameaccepted" || msgargs[0] == "gameready") {
+		location.replace( "/g/"+msgargs[1] );
+	}
+	if (msgargs[0] == "fen") {
+		try {
+			CVLoadFen(msgargs[1], msgargs[2])
+		}catch(err) {/* Not /g/8Ad2blahdeblah8sC page */}
 	}
 };
