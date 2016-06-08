@@ -139,6 +139,9 @@ button[material], [material][button] {
 	margin-right: 8px;
 	min-width: 64px;
 }
+button[material] + button[material], [material][button] + [material][button] {
+	margin-top: 8px;
+}
 [material][accent]:not([disabled]) {
 	background: #FFD740;
 }
@@ -185,7 +188,7 @@ button[material], [material][button] {
 .ripple {
 	display: block;
 	position: absolute;
-	background: rgba(0, 0, 0, .1);
+	background: rgba(0, 0, 0, .2);
 	border-radius: 100%;
 	-webkit-transform: scale(0);
 	transform: scale(0);
@@ -303,6 +306,9 @@ h1 {
 }
 h1, h2, h3, h4, h5, h6 {
 	font-family: montserrat;
+}
+h1 a:focus {
+	outline: none;
 }
 .splitter-table {
 	width: 100%;
@@ -507,4 +513,64 @@ h1 a {
 }
 [z="5"] {
 	box-shadow: 0 19px 38px rgba(0,0,0,0.30), 0 15px 12px rgba(0,0,0,0.22);
+}
+#msg-input {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	margin: 0;
+	width: 100%;
+	box-sizing: border-box;
+}
+table.splitter-table[cellspacing] td {
+	background: #EEEEEE;
+	box-sizing: border-box;
+	padding: 15px;
+}
+.allow-scroll {
+	overflow-y: auto;
+}
+.inner-container-absolute {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+}
+h3.white-player {
+	background: white;
+	color: #333333;
+}
+h3.white-player#your-username {
+	border-top: 2px solid #333333;
+}
+h3.white-player#opponent-username {
+	border-bottom: 2px solid #333333;
+}
+h3.black-player {
+	background: #333333;
+	color: white;
+}
+h3.white-player, h3.black-player {
+	padding: 15px;
+	text-align: center;
+	-webkit-margin-after: 0em;
+}
+#your-username {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	margin-bottom: 0;
+}
+#game-buttons {
+	padding: 15px;
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	-webkit-transform: translateY(-50%);
+	-ms-transform: translateY(-50%);
+	text-align: center;
+	left: 0;
+	right: 0;
 }
