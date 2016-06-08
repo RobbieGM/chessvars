@@ -3,13 +3,14 @@
 # TODO (3):
 # ACTUALLY GET TO PLAY CHESS!
 # Fix browser bugs
-# Board flipping
+# Game conclusion
 
 DEBUG = False
 NORMAL = 0
 CHECK = 1
 CHECKMATE = 2
 STALEMATE = 3
+from sys import argv
 from time import sleep
 import Chessnut
 from bottle import request, response, redirect, Bottle, abort, static_file, debug
@@ -34,11 +35,14 @@ def click_allow():
 	os.system("cliclick c:1000,375")
 def main_page_wrap(html, css=''):
 	return '''<!DOCTYPE html>
-	<html>
+	<html lang="en">
 	<head>
 		<link rel="stylesheet" type="text/css" href="/main.css"/>
 		<title>Chessvars</title>
 		<script src="/main.js"></script>
+		<link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=2"/>
+		<link rel="icon" type="image/x-icon" href="/favicon.ico?v=2"/>
+		<meta charset="utf-8"/>
 		<style>
 		'''+css+'''
 		</style>
@@ -60,6 +64,7 @@ game_page_file = open("game.html", "r")
 game_page = game_page_file.read()
 terms_file = open("terms.txt", "r")
 terms_and_conditions = terms_file.read()
+LEGAL_VARIANT_LIST = ['normal', 'atomic', 'race-kings', 'fischer-random', 'crazyhouse', 'suicide', 'sniper', 'koth', 'three-check', 'cheshire-cat', 'annihilation', 'gryphon', 'cornerless', 'mutation', 'bomb']
 class Admin:
 	def __init__(self, uname, pswd):
 		self.uname = uname
@@ -103,6 +108,24 @@ class Game:
 		self.delay = delay
 		self.game_id = game_id
 		self.cn_game = Chessnut.Game()
+		self.msgs = []
+		self.moves = []
+	def terminate(self):
+		if self.game_id in games:
+			winner = 'draw'
+			white_token = get_token_by_username(self.white_player)
+			black_token = get_token_by_username(self.black_player)
+			'''if logged_in_users[white_token]:
+				broadcast_to('gameconclusion:')
+			else:
+				pass # No white player?
+			if logged_in_users[black_token]:
+				logged_in_users[black_token]
+			else:
+				pass # No black player?'''
+			del games[self.game_id]
+		else:
+			print 'Game.terminate(): property `game_id` (equal to ', self.game_id, ') was not found in the games dict.'
 class LoggedInUser:
 	def __init__(self, username, session_token):
 		self.username = username
@@ -111,6 +134,9 @@ class LoggedInUser:
 		self.game_id = None
 	def logout(self, force=True):
 		if force or len(self.sockets) == 0:
+			if self.game_id in games:
+				games[self.game_id].terminate()
+			print 'User logged out.'
 			for i in xrange(len(game_offers)-1, -1, -1):
 				if game_offers[i].offered_by == self.username:
 					del game_offers[i]
@@ -123,8 +149,11 @@ class LoggedInUser:
 		self.logout_timer.daemon = True
 		self.logout_timer.start()
 	def on_socket_close(self):
+		print 'Socket closed.'
 		if len(self.sockets) == 0:
 			self.start_logout_timer()
+	def execute_js(self):
+		pass # which socket(s)?
 def switch_bw(c):
 		if c == "white":
 			return "black"
@@ -143,7 +172,7 @@ def get_token_by_socket(socket):
 		if token_has_socket(token, socket):
 			return token
 	return None
-def broadcast_to(from_token, message, recipients, signify_owned=False):
+def broadcast_to(message, recipients, from_token='FROM_SERVER', signify_owned=False):
 	if DEBUG:
 		print "from_token: "+from_token
 		print "message: "+message
@@ -165,10 +194,14 @@ def get_token_by_username(username):
 			return token
 	return None
 def delete_game(game_id):
-	broadcast_to("FROM_SERVER", "withdrawgame:"+game_id, "all")
+	broadcast_to("withdrawgame:"+game_id, "all", "FROM_SERVER")
 	for i in xrange(len(game_offers)-1, -1, -1):
 		if game_offers[i].game_id == game_id:
 			del game_offers[i]
+def string_is_int(s):
+	return False
+def permaban(session_token):
+	pass # Well, you sent some suspicious data. A little too suspicious.
 ICON_SIZE = str(40)
 hamburger_menu = '''
 <div material raised id="option-icon-container" class="option">
@@ -259,7 +292,7 @@ def save_uname():
 	temp_uname = escape(orig_temp_uname)
 	admin_pass = request.forms.get("password")
 	admin_login_attempt = request.forms.get("is_admin")
-	offensive_language = ["666", "69", "ass", "bitch", "balls", "biotch", "bollock", "biatch", "biutch", "boob", "cunt", "dick", "dieck", "damn", "fuck", "hell", "intercourse", "nigger", "nigga", "pussy", "penis", "piss", "shit", "shiat", "shait", "shiut", "sex", "slag", "vagina", "wanker"]
+	offensive_language = ["666", "69", "a55", "bitch", "balls", "biotch", "bollock", "biatch", "biutch", "boob", "cunt", "dick", "dieck", "damn", "fuck", "hell", "intercourse", "nigger", "nigga", "pussy", "penis", "piss", "shit", "shiat", "shait", "shiut", "sex", "slag", "vagina", "wanker", "faggot", "fagget", "fagg0t"]
 	if len(orig_temp_uname) > 20:
 		return main_page_wrap('''<h2>Could not choose username</h2><p>The username is you have chosen is too long.
 			<strong><em>Having fun with the 'inspect element' feature in your browser? Remember, hacking will get you banned!</em></strong>''')
@@ -293,6 +326,7 @@ def save_uname():
 	random_session_token = generate_session_token()
 	response.set_cookie("session_token", random_session_token, httponly="on")
 	logged_in_users[random_session_token] = LoggedInUser(temp_uname, random_session_token)
+	print 'New user: '+temp_uname
 	redirect("/")
 @app.route('/people')
 @username_required
@@ -301,6 +335,16 @@ def view_people():
 		<h2>People online</h2>
 		<h4>Keep in mind that the temporary username system allows usernames to be picked and chosen at each session, so one person you saw earlier may have a different username now.</h4>
 		'''+hamburger_menu)
+@app.route('/blankpage')
+def blank_page():
+	return main_page_wrap('''
+		<h2>Blank testing page</h2>
+		<div style='position: relative; background: #CACACA; width: 500px; height; 350px'>
+			<div style='position: absolute; top: 50px; bottom: 100px; right: 70px; left: 50px;'>
+				<button material raised>Button</button>
+			</div>
+		</div>
+		''')
 @app.route('/socket')
 @username_required
 def socket():
@@ -314,28 +358,6 @@ def socket():
 		def send_fen():
 			socket.send("fen:"+cn_game.fen_history[-1:][0]+":newboard") # fen:rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR:newboard
 		Timer(0.3, send_fen).start()
-	'''def ping_socket():
-		try:
-			socket.send("testsocket")
-		except Exception as e:
-			num_user_sockets = len(logged_in_users[initial_session_token].sockets)
-			for i in xrange(num_user_sockets-1, -1, -1):
-				print "found user socket"
-				if logged_in_users[initial_session_token].sockets[i] is socket:
-					del logged_in_users[initial_session_token].sockets[i]
-					print "deleted dead socket(s)"
-					if len(logged_in_users[initial_session_token].sockets) == 0:
-						print "user closed final socket, deleting user"
-						for i in xrange(len(game_offers)-1, -1, -1):
-							if game_offers[i].offered_by == logged_in_users[initial_session_token].username:
-								print "deleted user game offer (user logged out)"
-								del game_offers[i]
-						del logged_in_users[initial_session_token]
-		else:
-			t = Timer(5, ping_socket)
-			t.daemon = True
-			t.start()
-	ping_socket()'''
 	while True:
 		try:
 			msg = socket.receive()
@@ -344,6 +366,7 @@ def socket():
 				print "Session token linked to a socket changed."
 			# if msg == None, then connection terminated
 			if not msg:
+				print 'No message, socket close assumed.'
 				for i in xrange(len(logged_in_users[new_session_token].sockets)-1, -1, -1):
 					if logged_in_users[new_session_token].sockets[i] is socket:
 						del logged_in_users[new_session_token].sockets[i]
@@ -351,14 +374,14 @@ def socket():
 				abort(400, "Connection closed.")
 			msg_args = msg.split(":")
 			print msg_args
-			if msg_args[0] == 'creategame':
+			if msg_args[0] == 'creategame' and msg_args[1] in LEGAL_VARIANT_LIST:
 				if logged_in_users[new_session_token].game_id in games:
 					socket.send('showmessage:<h3>You are already in a game</h3><p>Please finish the game you are in before you accept another game.</p>')
 				else:
 					if session_exists(new_session_token):
 						game_id = generate_session_token()
 						game_offers.append(GameOffer(logged_in_users[new_session_token].username, msg_args[1], msg_args[2], msg_args[3], msg_args[4], game_id, new_session_token))
-						broadcast_to(new_session_token, "newgame:"+logged_in_users[new_session_token].username+":"+msg_args[1]+":"+msg_args[2]+":"+msg_args[3]+":"+switch_bw(msg_args[4])+":"+game_id, "all", signify_owned=True)
+						broadcast_to("newgame:"+logged_in_users[new_session_token].username+":"+msg_args[1]+":"+msg_args[2]+":"+msg_args[3]+":"+switch_bw(msg_args[4])+":"+game_id, "all", new_session_token, signify_owned=True)
 					else:
 						print "weird error."
 			if msg_args[0] == 'acceptgame': # Remember, acceptgame means withdraw game if game is 'accepted' by creator of that game!
@@ -377,9 +400,8 @@ def socket():
 								# Accept game
 								logged_in_users[new_session_token].game_id = game_offers[i].game_id
 								logged_in_users[game_offers[i].offered_by_session].game_id = game_offers[i].game_id
-								socket.send("gameready:"+game_offers[i].game_id)
-								for sock in logged_in_users[game_offers[i].offered_by_session].sockets: # Notify game creator on all sockets
-									sock.send('gameaccepted:'+game_offers[i].game_id)
+								socket.send('gameready:'+game_offers[i].game_id)
+								broadcast_to('gameaccepted:'+game_offers[i].game_id, game_offers[i].offered_by_session)
 								offered_by  = game_offers[i].offered_by
 								accepted_by = logged_in_users[new_session_token].username
 								if game_offers[i].play_as != "white" and game_offers[i].play_as != "black":
@@ -409,11 +431,48 @@ def socket():
 						else:
 							socket.send("fen:"+cn_game.fen_history[-1:][0]+":newboard")
 							if logged_in_users[new_session_token].username == game.white_player:
-								for sock in logged_in_users[get_token_by_username(game.black_player)].sockets:
-									sock.send("fen:"+cn_game.fen_history[-1:][0]+":newboard")
+								broadcast_to('fen:'+cn_game.fen_history[-1:][0]+':newboard', get_token_by_username(game.black_player))
 							elif logged_in_users[new_session_token].username == game.black_player:
-								for sock in logged_in_users[get_token_by_username(game.white_player)].sockets:
-									sock.send("fen:"+cn_game.fen_history[-1:][0]+":newboard")
+								broadcast_to('fen:'+cn_game.fen_history[-1:][0]+':newboard', get_token_by_username(game.white_player))
+							else:
+								pass # Player is in a game but not white or black? Weird. Possibly hacking
+					elif msg_args[1] == 'message' and (msg_args[2] or msg_args[3]): # Emojis like ':-)' when split will return ['', '-)']
+						msg_content = ':'.join(msg.split(':')[2:])
+						msg_content = escape(msg_content) # XSS protection
+						msg_sender = logged_in_users[new_session_token].username
+						game = games[logged_in_users[new_session_token].game_id]
+						game.msgs.append('<article><span style="color: #FFAB00;">['+msg_sender+']</span> '+msg_content+'</article>')
+						socket.send('gamemessage:'+msg_sender+':'+msg_content)
+						if logged_in_users[new_session_token].username == game.white_player:
+							broadcast_to('gamemessage:'+msg_sender+':'+msg_content, get_token_by_username(game.black_player))
+						elif logged_in_users[new_session_token].username == game.black_player:
+							broadcast_to('gamemessage:'+msg_sender+':'+msg_content, get_token_by_username(game.white_player))
+						else:
+							pass # Player is in a game but not white or black? Weird. Possibly hacking
+					elif msg_args[1] == 'resign':
+						game_id = logged_in_users[new_session_token].game_id
+						game = games[game_id]
+						opponent = 'draw'
+						if logged_in_users[new_session_token].username == game.white_player:
+							opponent = game.black_player
+						elif logged_in_users[new_session_token].username == game.black_player:
+							opponent = game.white_player
+						else:
+							pass # Player is in a game but not white or black? Weird. Possibly hacking
+						socket.send('gameconclusion:'+opponent)
+						broadcast_to('gameconclusion:'+opponent, get_token_by_username(opponent))
+					elif msg_args[1] == 'takeback':
+						game_id = logged_in_users[new_session_token].game_id
+						game = games[game_id]
+						print game.cn_game.fen_history
+						if len(game.cn_game.fen_history) > 1:
+							game.cn_game.fen_history.pop()
+							game.cn_game.set_fen(game.cn_game.fen_history.pop())
+							socket.send("fen:"+cn_game.fen_history[-1:][0]+":newboard")
+							if logged_in_users[new_session_token].username == game.white_player:
+								broadcast_to('fen:'+cn_game.fen_history[-1:][0]+':newboard', get_token_by_username(game.black_player))
+							elif logged_in_users[new_session_token].username == game.black_player:
+								broadcast_to('fen:'+cn_game.fen_history[-1:][0]+':newboard', get_token_by_username(game.white_player))
 							else:
 								pass # Player is in a game but not white or black? Weird. Possibly hacking
 				else:
@@ -442,12 +501,16 @@ def game_page_func(game_id):
 			opponent = game.black_player
 		if game.black_player == current_user.username:
 			opponent = game.white_player
-		return main_page_wrap(game_page.format(white_player=game.white_player, black_player=game.black_player, username=current_user.username, opponent_username=opponent, variant=game.variant, hamburger_menu=hamburger_menu))
+		msgs = ''.join(game.msgs)
+		return main_page_wrap(game_page.format(white_player=game.white_player, black_player=game.black_player, username=current_user.username, opponent_username=opponent, variant=game.variant, msgs=msgs, hamburger_menu=hamburger_menu))
 	except KeyError:
 		return main_page_wrap('''
 			<h2>Game unavailable</h2>
 			<p>Sorry, this game is no longer available. This could be caused by a slow internet connection or by a bug in our server.</p>
 			''')
+@app.route('/favicon.ico')
+def get_favicon():
+	return static_file("cv-favicon.ico", root="/Users/rmoore/code/resources")
 @app.route('/main.css')
 def get_main_css():
 	return static_file("main.css", root="/Users/rmoore/code")
@@ -466,6 +529,11 @@ def error_404(error):
 		<h2>Page not found (404)</h2>
 		<p>This page was not found (it may have moved). Sorry.</p>
 		''')
+@app.error(500)
+def error_500(error):
+	return main_page_wrap('''
+		<h2>Internal server error (500)</h2>
+		''')
 def debug_manually():
 	print "-----------------------------------"
 	for session_token in logged_in_users:
@@ -481,7 +549,11 @@ try:
 	ipaddr = (subprocess.check_output("ipconfig getifaddr en1", shell=True))[:-1]
 except:
 	print "WiFi unavailable. Running on localhost."
-server = WSGIServer((ipaddr, 8080), app, handler_class=WebSocketHandler)
+port = 8080
+if len(argv) > 1 and argv[1]:
+	port = int(argv[1])
+print 'http://'+ipaddr+':'+str(port)+'/'
+server = WSGIServer((ipaddr, port), app, handler_class=WebSocketHandler)
 click_allow_timer = Timer(0.25, click_allow)
 click_allow_timer.start()
 server.serve_forever()
