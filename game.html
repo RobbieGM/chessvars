@@ -1,13 +1,22 @@
-<table class='splitter-table'>
+<table class='splitter-table' cellspacing='15px'>
 	<tr>
-		<td></td>
+		<td style='position: relative;' z='1'>
+			<div class='inner-container-absolute allow-scroll' id='msg-box' style='padding: 15px; bottom: 38px'>
+			{msgs}
+			</div>
+			<input id='msg-input' type='text' placeholder='Instant message opponent'/>
+		</td>
 		<td id='chess-board-container'>
 			<canvas id='chess-board' z='2'></canvas>
 		</td>
-		<td>
+		<td z='1' class='allow-scroll' style='padding: 0; position: relative'>
 			<!-- Add vertically aligned (lichess-style) player data stuff. -->
-			<h3>{white_player} vs. {black_player}</h3>
-			<button material raised id='rotate-board'>Rotate board</button>
+			<h3 id='opponent-username'>{opponent_username}</h3>
+			<section id='game-buttons'>
+				<button material raised id='rotate-board'>Rotate board</button>
+				<button material raised onclick='socket.send("game:takeback")'>Instant takeback</button>
+			</section>
+			<h3 id='your-username'>{username}</h3>
 		</td>
 	</tr>
 </table>
