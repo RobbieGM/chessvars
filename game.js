@@ -1,8 +1,14 @@
 var darkSquareColor = localStorage.darkSquareColor;
 var lightSquareColor = localStorage.lightSquareColor;
+onbeforeunload = function() {
+	//return 'You are playing a game. Are you sure you would like to exit (this will cause you to resign?)'
+};
 var animating = true; // for debugging
 var CVLoadFen = function() {
 	CVAlert("Error in game.js in trying to load the FEN (board model). Try reloading the page.", ["Dismiss"]);
+};
+var CVGameMessage = function() {
+	CVAlert("Error in game.js in trying to receive game messages. Try reloading the page.", ["Dismiss"]);
 };
 var pieceToClipXMap = {
 	'R': 0,
@@ -34,6 +40,8 @@ addEventListener('load', function() {
 	var username 		 = document.getElementById('username').innerHTML;
 	var opponentUsername = document.getElementById('opponent-username').innerHTML;
 	var chessBoard = document.getElementById('chess-board');
+	var chatBox = document.getElementById('msg-input');
+	var msgBox = document.getElementById('msg-box');
 	chessBoard.width = parseInt(getComputedStyle(chessBoard.parentNode).width) + 2;
 	chessBoard.height = chessBoard.width;
 	var chessBoardContext = chessBoard.getContext('2d');
@@ -44,20 +52,33 @@ addEventListener('load', function() {
 		window.mozRequestAnimationFrame ||
 		window.oRequestAnimationFrame ||
 		window.msRequestAnimationFrame ||
-		function( /* function FrameRequestCallback */ callback, /* DOMElement Element */ element ) {
+		function(callback, element) {
 			window.setTimeout( callback, 1000 / 60 );
 		};
 	} )();
 	var canvasSize = chessBoard.width;
-	addEventListener('resize', function() {
+	var resizeEventListener = function() {
 		chessBoard.width = parseInt(getComputedStyle(chessBoard.parentNode).width) + 2;
 		chessBoard.height = chessBoard.width;
 		canvasSize = chessBoard.width;
-	});
+	};
+	addEventListener('resize', resizeEventListener);
+	var msgBox = document.getElementById('msg-box');
 	var fc = 0;
 	var loaded = false;
 	var currentRanksArray = []; // No need to keep track of FEN, server will authorize castling/en-passant
 	var playerToMove = 'w';
+	var piecesDisabled = false;
+	function disablePiecesForAnimation(millis, extraFunction) {
+		piecesDisabled = true;
+		setTimeout(function() {
+			piecesDisabled = true;
+			if (extraFunction) extraFunction.call(null, millis);
+		}, millis);
+	}
+	function lerp(x, y, a) {
+		return x + (y - x) * a;
+	}
 	CVLoadFen = function(fen, lastMove) {
 		loaded = true;
 		console.log('FEN: '+fen);
@@ -73,6 +94,11 @@ addEventListener('load', function() {
 		var ranks = board.split('/');
 		currentRanksArray = ranks;
 		playerToMove = fen.split(' ')[1];
+	};
+	CVGameMessage = function(sentFrom, messageContent) {
+		var article = document.createElement('article');
+		article.innerHTML = '<span style="color: #FFAB00">['+sentFrom+']</span> '+messageContent;
+		msgBox.appendChild(article);
 	};
 	function getSquareByCursorPosition(e) {
 		var cursorX = e.clientX, cursorY = e.clientY;
@@ -116,8 +142,9 @@ addEventListener('load', function() {
 		};
 		return [map[algebraicSquare[0]], 8-algebraicSquare[1]];
 	}
-	function getPieceByCursorPosition(e) {
+	function getPieceByCursorPosition(e, visual) {
 		var square = getSquareByCursorPosition(e);
+		if (visual) { square = visualSquare( square ); }
 		var indexX = square[0];
 		var indexY = square[1];
 		if (indexX == -1 || indexY == -1) {
@@ -131,12 +158,25 @@ addEventListener('load', function() {
 	chessBoard.onmousedown = function() {
 		mouseDown = true;
 	};
-	chessBoard.onmouseup = function() {
+	chessBoard.onmouseup = function(e) {
 		mouseDown = false;
+		if (dragging) {
+			var toDragAlgSquare = getAlgebraicSquareBySquare(visualSquare(getSquareByCursorPosition(e)));
+			if (dragStartAlgebraicSquare != toDragAlgSquare) 
+				socket.send('game:move:'+dragStartAlgebraicSquare+toDragAlgSquare);
+			dragging = false;
+		}
+		dragStartSquare = undefined;
+		dragStartAlgebraicSquare = undefined;
 	};
+	var dragStartSquare;
+	var dragStartAlgebraicSquare;
+	var dragging = false;
 	var mouseX = 1, mouseY = 1;
 	var clientPosition = [];
-	var rotated = true;
+	var rotated = playerColor == 'b';
+	document.getElementById('your-username').className = (playerColor == 'w' ? 'white-player' : 'black-player');
+	document.getElementById('opponent-username').className = (opponentUsername == whitePlayer ? 'white-player' : 'black-player');
 	document.getElementById('rotate-board').onclick = function() {
 		rotated = !rotated;
 	};
@@ -149,10 +189,14 @@ addEventListener('load', function() {
 		mouseX = cursorX;
 		mouseY = cursorY;
 		if (!loaded) return;
-		var pieceByCursor = getPieceByCursorPosition(e);
+		var pieceByCursor = getPieceByCursorPosition(e, true);
 		if (mouseDown && pieceByCursor && (((pieceByCursor == pieceByCursor.toUpperCase() && playerColor == 'w') || (pieceByCursor == pieceByCursor.toLowerCase() && playerColor == 'b')) && isNaN(parseInt(pieceByCursor)) && playerToMove == playerColor)) {
-			CVAlert('<h3>Click, don\'t drag</h3>Enter moves by tapping, not dragging.');
-			mouseDown = false;
+			//CVAlert('<h3>Click, don\'t drag</h3>Enter moves by tapping, not dragging.'); // Warning, this is annoying. Well GUESS WHAT you can drag your pieces now
+			dragging = true;
+			if (!dragStartSquare) {
+				dragStartSquare = visualSquare(getSquareByCursorPosition(e));
+				dragStartAlgebraicSquare = getAlgebraicSquareBySquare(dragStartSquare);
+			}
 		}
 		if (pieceByCursor) {
 			if (((pieceByCursor == pieceByCursor.toUpperCase() && playerColor == 'w') || (pieceByCursor == pieceByCursor.toLowerCase() && playerColor == 'b')) && isNaN(parseInt(pieceByCursor)) && playerToMove == playerColor) {
@@ -173,21 +217,30 @@ addEventListener('load', function() {
 	function visualSquare(square) {
 		return (rotated ? rotateSquare(square) : square);
 	}
+	chatBox.onkeyup = function(e) {
+		var keyCode = e.keyCode || e.which || e.charCode;
+		if (keyCode == 13) {
+			if (! /^\s*$/.test(this.value)) {
+				socket.send('game:message:'+this.value);
+				this.value = '';
+			}
+		}
+	}
 	chessBoard.onclick = function(e) {
-		// Time to move the pieces
-		var pieceByCursor = getPieceByCursorPosition(e);
+		var pieceByCursor = getPieceByCursorPosition(e, true);
 		if (playerToMove == playerColor) {
 			if ( ((pieceByCursor == pieceByCursor.toUpperCase() && playerColor == 'w') || (pieceByCursor == pieceByCursor.toLowerCase() && playerColor == 'b')) && isNaN(parseInt(pieceByCursor)) ) {
-				fromSquare = getSquareByCursorPosition(e);
+				fromSquare = visualSquare(getSquareByCursorPosition(e));
 				fromAlgebraicSquare = getAlgebraicSquareBySquare(fromSquare);
 			}else if (fromAlgebraicSquare && fromSquare) {
-				var toAlgebraicSquare = getAlgebraicSquareBySquare(getSquareByCursorPosition(e));
+				var toAlgebraicSquare = getAlgebraicSquareBySquare(visualSquare(getSquareByCursorPosition(e)));
 				socket.send('game:move:'+fromAlgebraicSquare+toAlgebraicSquare);
 				fromAlgebraicSquare = undefined;
 				fromSquare = undefined;
 			}
 		}
 	};
+	var isFirstLoadedFrame = true;
 	function animate() {
 		c.fillStyle = "#AAAAAA";
 		c.fillRect(0, 0, canvasSize+1, canvasSize+1);
@@ -199,35 +252,50 @@ addEventListener('load', function() {
 			}
 		}
 		if (loaded) {
+			if (isFirstLoadedFrame) {
+				resizeEventListener();
+			}
+			if (dragStartSquare) {
+				c.globalAlpha = 0.5;
+				c.fillStyle = '#FFAB00'; // #FFD740?
+				c.fillRect(visualSquare( dragStartSquare )[0] *canvasSize/8, visualSquare( dragStartSquare )[1]*canvasSize/8, canvasSize/8, canvasSize/8);
+				c.globalAlpha = 1;
+			}
 			if (fromAlgebraicSquare) {
 				c.globalAlpha = 0.5;
 				c.fillStyle = '#FFAB00'; // #FFD740?
-				c.fillRect(fromSquare[0]*canvasSize/8, fromSquare[1]*canvasSize/8, canvasSize/8, canvasSize/8);
+				c.fillRect(visualSquare( fromSquare )[0] *canvasSize/8, visualSquare( fromSquare )[1]*canvasSize/8, canvasSize/8, canvasSize/8);
 				c.globalAlpha = 1;
 			}
 			var sq;
 			for (var rank=0;rank<currentRanksArray.length;rank++) {
 				for (var file=0;file<currentRanksArray[rank].length;file++) {
-					sq = rotateSquare([rank, file]);
-					if (rank == 7 && fc % 50 == 0) {
-						console.log(sq);
-						console.log([rank, file]);
-					}
+					sq = visualSquare([rank, file]);
 					if (currentRanksArray[sq[0]][sq[1]] != '1') {
 						var clipXY = getClipXY(currentRanksArray[sq[0]][sq[1]]);
-						c.drawImage(img, clipXY[0], clipXY[1], clipWidth, clipHeight, sq[1]*canvasSize/8, sq[0]*canvasSize/8, canvasSize/8, canvasSize/8);
+						c.drawImage(img, clipXY[0], clipXY[1], clipWidth, clipHeight, file*canvasSize/8, rank*canvasSize/8, canvasSize/8, canvasSize/8);
 					}
 				}
+			}
+			if (dragStartSquare) {
+				c.globalAlpha = 0.5;
+				var clipXY = getClipXY(currentRanksArray[dragStartSquare[1]][dragStartSquare[0]]);
+				c.fillStyle = '#FFAB00';
+				var square = getSquareByCursorPosition({clientX: clientPosition[0], clientY: clientPosition[1]}) ;
+				c.fillRect(square[0]*canvasSize/8, square[1]*canvasSize/8, canvasSize/8, canvasSize/8);
+				c.drawImage(img, clipXY[0], clipXY[1], clipWidth, clipHeight, mouseX-canvasSize/16, mouseY-canvasSize/16, canvasSize/8, canvasSize/8);
+				c.globalAlpha = 1;
 			}
 			if (fromAlgebraicSquare) {
 				c.globalAlpha = 0.5;
 				var clipXY = getClipXY(currentRanksArray[fromSquare[1]][fromSquare[0]]);
 				c.fillStyle = '#FFAB00';
-				var square = getSquareByCursorPosition({clientX: clientPosition[0], clientY: clientPosition[1]});
+				var square = getSquareByCursorPosition({clientX: clientPosition[0], clientY: clientPosition[1]}) ;
 				c.fillRect(square[0]*canvasSize/8, square[1]*canvasSize/8, canvasSize/8, canvasSize/8);
 				c.drawImage(img, clipXY[0], clipXY[1], clipWidth, clipHeight, mouseX-canvasSize/16, mouseY-canvasSize/16, canvasSize/8, canvasSize/8);
 				c.globalAlpha = 1;
 			}
+			isFirstLoadedFrame = false;
 		}else{
 			c.fillStyle = 'black';
 			c.textAlign = 'center';
