@@ -1,5 +1,4 @@
 // JavaScript Safari bug to fix! [material] buttons won't press unless held or double-clicked.
-
 console.log("%cCaution", "font: bold 35pt sans-serif; color: red;");
 console.log("%cEven though we use a temporary username system and there is not much to lose (e.g., account passwords), pasting text here may give scammers or hackers access \
 to your Chessvars in-browser settings or worse your session id. Your session id could give them the ability to play your games or send messages as 'you'.",
@@ -45,8 +44,9 @@ function activateMaterial() {
 			var x = e.changedTouches[0].pageX;
 			var y = e.changedTouches[0].pageY;
 		}
-		x = x - this.offsetLeft - ripple.offsetWidth / 2;
-		y = y - this.offsetTop - ripple.offsetHeight / 2;
+		var cRect = this.getBoundingClientRect();
+		x = e.clientX - cRect.left - ripple.offsetWidth / 2;
+		y = e.clientY - cRect.top - ripple.offsetHeight / 2;
 		ripple.style.top = y + 'px';
 		ripple.style.left = x + 'px';
 		ripple.classList.add('animate');
@@ -220,5 +220,15 @@ socket.onmessage = function(received) {
 		try {
 			CVLoadFen(msgargs[1], msgargs[2])
 		}catch(err) {/* Not /g/8Ad2blahdeblah8sC page */}
+	}
+	if (msgargs[0] == "gamemessage") {
+		try {
+			var gameMessage = msg.split(':').slice(2, msgargs.length).join(':');
+			console.log(gameMessage);
+			CVGameMessage(msgargs[1], gameMessage);
+		}catch(err) {
+			console.log(err);
+			console.log('CVGameMessage not defined');
+		}
 	}
 };
