@@ -10,6 +10,21 @@ var CVLoadFen = function() {
 var CVGameMessage = function() {
 	CVAlert("Error in game.js in trying to receive game messages. Try reloading the page.", ["Dismiss"]);
 };
+var CVGameConclusion = function() {
+	CVAlert("Error in game.js in trying to conclude a game. Try reloading the page.", ["Dismiss"]);
+};
+var CVTakebackOffer = function() {
+	CVAlert("Error in game.js in trying to receive takeback offer. Try reloading the page.", ["Dismiss"]);
+};
+var CVTakeback = function() {
+	CVAlert("Error in game.js in trying to complete takeback. Try reloading the page.", ["Dismiss"]);
+};
+var CVDrawOffer = function() {
+	CVAlert("Error in game.js in trying to receive draw offer. Try reloading the page.", ["Dismiss"]);
+};
+var CVDrawDecline = function() {
+	CVAlert("Error in game.js in trying to receive declined draw offer. Try reloading the page.", ["Dismiss"]);
+};
 var pieceToClipXMap = {
 	'R': 0,
 	'r': 0,
@@ -39,6 +54,7 @@ addEventListener('load', function() {
 	var blackPlayer 	 = document.getElementById('black-player').innerHTML;
 	var username 		 = document.getElementById('username').innerHTML;
 	var opponentUsername = document.getElementById('opponent-username').innerHTML;
+	var isSpectating 	 = document.getElementById('spectating').innerHTML == 'True';
 	var chessBoard = document.getElementById('chess-board');
 	var chatBox = document.getElementById('msg-input');
 	var msgBox = document.getElementById('msg-box');
@@ -81,7 +97,6 @@ addEventListener('load', function() {
 	}
 	CVLoadFen = function(fen, lastMove) {
 		loaded = true;
-		console.log('FEN: '+fen);
 		console.log('lastMove: '+lastMove);
 		var board = fen.split(' ')[0];
 		board = board.replace(/2/g, '11');
@@ -100,6 +115,58 @@ addEventListener('load', function() {
 		article.innerHTML = '<span style="color: #FFAB00">['+sentFrom+']</span> '+messageContent;
 		msgBox.appendChild(article);
 	};
+	CVGameConclusion = function(conclusion, bw_winner, how) {
+		var title;
+		if (conclusion == 'win') {
+			title = '<h4>You win';
+		}else if (conclusion == '<draw>') {
+			title = '<h4>Draw'
+		}else{
+			title = '<h4>Opponent wins';
+		}
+		title += ' by '+how+'</h4>';
+		var remainingText;
+		if (bw_winner == 'white') {
+			remainingText = '<b>1 - 0</b>, white is victorious';
+		}else if (bw_winner == '<draw>') {
+			remainingText = '<b>1/2 - 1/2</b>, draw';
+		}else{
+			remainingText = '<b>0 - 1</b>, black is victorious';
+		}
+		var buttons = '<button material raised onclick="location.href=\'/\';">Back</button>';
+		document.getElementById('game-buttons').innerHTML = title + remainingText + '<br/>' + buttons;
+		activateMaterial();
+	};
+	CVTakebackOffer = function() {
+		document.getElementById('offer-takeback').innerHTML = 'Accept takeback';
+	};
+	CVTakeback = function() {
+		document.getElementById('offer-takeback').innerHTML = 'Offer takeback';
+		document.getElementById('offer-takeback').disabled = false;
+	};
+	CVDrawOffer = function() {
+		document.getElementById('offer-draw').innerHTML = 'Accept draw';
+	};
+	CVDrawDecline = function() {
+		document.getElementById('offer-draw').disabled = false;
+		document.getElementById('offer-draw').innerHTML = 'Offer draw';
+	};
+	document.getElementById('offer-takeback').onclick = function() {
+		socket.send('game:takeback');
+		this.disabled = true;
+	};
+	document.getElementById('offer-draw').onclick = function() {
+		socket.send('game:draw');
+		this.disabled = true;
+	};
+	document.getElementById('resign').onclick = function() {
+		CVAlert('<h3>Resignation</h3>Are you sure you would like to resign this game?', ['Cancel', 'OK']);
+		onAlertDismiss = function(result) {
+			if (result == 'OK') {
+				socket.send('game:resign');
+			}
+		};
+	}
 	function getSquareByCursorPosition(e) {
 		var cursorX = e.clientX, cursorY = e.clientY;
 		var rect = chessBoard.getBoundingClientRect();
@@ -162,7 +229,7 @@ addEventListener('load', function() {
 		mouseDown = false;
 		if (dragging) {
 			var toDragAlgSquare = getAlgebraicSquareBySquare(visualSquare(getSquareByCursorPosition(e)));
-			if (dragStartAlgebraicSquare != toDragAlgSquare) 
+			if (dragStartAlgebraicSquare != toDragAlgSquare)
 				socket.send('game:move:'+dragStartAlgebraicSquare+toDragAlgSquare);
 			dragging = false;
 		}
@@ -190,8 +257,7 @@ addEventListener('load', function() {
 		mouseY = cursorY;
 		if (!loaded) return;
 		var pieceByCursor = getPieceByCursorPosition(e, true);
-		if (mouseDown && pieceByCursor && (((pieceByCursor == pieceByCursor.toUpperCase() && playerColor == 'w') || (pieceByCursor == pieceByCursor.toLowerCase() && playerColor == 'b')) && isNaN(parseInt(pieceByCursor)) && playerToMove == playerColor)) {
-			//CVAlert('<h3>Click, don\'t drag</h3>Enter moves by tapping, not dragging.'); // Warning, this is annoying. Well GUESS WHAT you can drag your pieces now
+		if (mouseDown && pieceByCursor && (((pieceByCursor == pieceByCursor.toUpperCase() && playerColor == 'w') || (pieceByCursor == pieceByCursor.toLowerCase() && playerColor == 'b')) && isNaN(parseInt(pieceByCursor)) && playerToMove == playerColor) && !isSpectating) {
 			dragging = true;
 			if (!dragStartSquare) {
 				dragStartSquare = visualSquare(getSquareByCursorPosition(e));
@@ -199,7 +265,7 @@ addEventListener('load', function() {
 			}
 		}
 		if (pieceByCursor) {
-			if (((pieceByCursor == pieceByCursor.toUpperCase() && playerColor == 'w') || (pieceByCursor == pieceByCursor.toLowerCase() && playerColor == 'b')) && isNaN(parseInt(pieceByCursor)) && playerToMove == playerColor) {
+			if (((pieceByCursor == pieceByCursor.toUpperCase() && playerColor == 'w') || (pieceByCursor == pieceByCursor.toLowerCase() && playerColor == 'b')) && isNaN(parseInt(pieceByCursor)) && playerToMove == playerColor && !isSpectating) {
 				chessBoard.style.cursor = 'pointer';
 			}else{
 				chessBoard.style.cursor = 'default';
@@ -225,7 +291,7 @@ addEventListener('load', function() {
 				this.value = '';
 			}
 		}
-	}
+	};
 	chessBoard.onclick = function(e) {
 		var pieceByCursor = getPieceByCursorPosition(e, true);
 		if (playerToMove == playerColor) {
@@ -240,6 +306,13 @@ addEventListener('load', function() {
 			}
 		}
 	};
+	if (isSpectating) {
+		onbeforeunload = function() {
+			socket.send('notspectating');
+		};
+		document.getElementById('game-buttons').innerHTML = '';
+		document.getElementById('msg-input').placeholder = 'Message other spectators';
+	}
 	var isFirstLoadedFrame = true;
 	function animate() {
 		c.fillStyle = "#AAAAAA";
