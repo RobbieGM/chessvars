@@ -13,8 +13,10 @@
 			<!-- Add vertically aligned (lichess-style) player data stuff. -->
 			<h3 id='opponent-username'>{opponent_username}</h3>
 			<section id='game-buttons'>
+				<button material raised id='resign'>Resign</button>
+				<button material raised id='offer-takeback'>Offer takeback</button>
 				<button material raised id='rotate-board'>Rotate board</button>
-				<button material raised onclick='socket.send("game:takeback")'>Instant takeback</button>
+				<button material raised id='offer-draw'>Offer draw</button>
 			</section>
 			<h3 id='your-username'>{username}</h3>
 		</td>
@@ -24,5 +26,6 @@
 <var style='display:none' id='black-player'>{black_player}</var>
 <var style='display:none' id='username'>{username}</var>
 <var style='display:none' id='opponent-username'>{opponent_username}</var>
+<var style='display:none' id='spectating'>{is_spectating}</var>
 {hamburger_menu}
 <script src='/game.js'></script>
