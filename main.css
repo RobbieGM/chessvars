@@ -1,7 +1,6 @@
 @import url(https://fonts.googleapis.com/css?family=Domine:400,700);
 @import url(https://fonts.googleapis.com/css?family=Montserrat:400,700);
 @charset "UTF-8";
-
 .navicon-button {
 	display: inline-block;
 	position: relative;
@@ -19,7 +18,6 @@
 #option-icon-container:hover .navicon-button .navicon:before, #option-icon-container:hover .navicon-button .navicon:after {
 	transition: 0.25s;
 }
-
 .navicon {
 	position: relative;
 	width: 2.5em;
@@ -50,12 +48,10 @@
 .open:not(.steps) .navicon:after {
 	top: 0 !important;
 }
-
 .open .navicon:before,
 .open .navicon:after {
 	transition: 0.5s;
 }
-
 .open.x .navicon {
 	background: transparent;
 }
@@ -65,7 +61,6 @@
 .open.x .navicon:after {
 	transform: rotate(45deg);
 }
-
 #option-icon-container {
 	overflow: hidden;
 	background: #3F51B5;
@@ -110,7 +105,6 @@
 #option-2.open { bottom: 240px; }
 #option-3.open { bottom: 330px; }
 #option-4.open { bottom: 420px; }
-
 .option.open {
 	right: 50px;
 	width: 80px;
@@ -119,7 +113,6 @@
 	transition-duration: 0.3s;
 	transition-timing-function: ease-out;
 }
-
 [material] {
 	position: relative;
 	overflow: hidden;
@@ -136,6 +129,7 @@ button[material], [material][button] {
 	height: 36px;
 	line-height: 18px;
 	box-sizing: border-box;
+	white-space: nowrap;
 	margin-right: 8px;
 	min-width: 64px;
 }
@@ -322,8 +316,12 @@ h1 a:focus {
 	margin-top: 0;
 }
 #main {
-	margin: 5%;
+	margin: 4%;
+	display: -webkit-flex;
+	display: flex;
 	font-family: domine;
+	border-spacing: 15px;
+	flex-wrap: wrap;
 }
 a {
 	color: #FFAB00;
@@ -347,7 +345,7 @@ form input, form button {
 	opacity: 0;
 	visibility: hidden;
 	transition-duration: 0.3s;
-	position: absolute;
+	position: fixed;
 	display: block;
 	left: 50%;
 	top: 50%;
@@ -375,7 +373,7 @@ form input, form button {
 	-ms-transform: translate(-50%, -50%);
 }
 #modal-overlay {
-	position: absolute;
+	position: fixed;
 	display: block;
 	visibility: hidden;
 	opacity: 0;
@@ -396,7 +394,7 @@ form input, form button {
 }
 #modal-dialog-content {
 	width: 100%;
-	height: 70%;
+	height: calc(100% - 61px);
 	overflow-y: auto;
 	margin: 0;
 	padding: 10px;
@@ -556,6 +554,10 @@ h3.white-player, h3.black-player {
 	text-align: center;
 	-webkit-margin-after: 0em;
 }
+#chat-card {
+	position: relative;
+	min-width: 200px;
+}
 #your-username {
 	position: absolute;
 	left: 0;
@@ -573,4 +575,21 @@ h3.white-player, h3.black-player {
 	text-align: center;
 	left: 0;
 	right: 0;
+}
+input[name='settings'] { /* "settings" is actually a honeypot */
+	position: absolute;
+	left: -800px;
+	top: -500px;
+}
+.message {
+	color: gray;
+}
+.layout-card {
+	min-height: 100px;
+	padding: 15px;
+	padding-top: 0;
+	margin: 15px;
+	flex: 1;
+	display: table-cell;
+	background: #EEEEEE;
 }
