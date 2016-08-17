@@ -1,8 +1,14 @@
-// JavaScript Safari bug to fix! [material] buttons won't press unless held or double-clicked.
+var isSafari = Object.prototype.toString.call(window.HTMLElement).indexOf('Constructor') > 0;
 console.log("%cCaution", "font: bold 35pt sans-serif; color: red;");
 console.log("%cEven though we use a temporary username system and there is not much to lose (e.g., account passwords), pasting text here may give scammers or hackers access \
 to your Chessvars in-browser settings or worse your session id. Your session id could give them the ability to play your games or send messages as 'you'.",
 	"font: 12pt georgia, serif;");
+function validateUsername(name) {
+	var xhr = new XMLHttpRequest();
+	xhr.open('GET', '/validate_username?name='+name, false);
+	xhr.send();
+	return xhr.responseText == 'valid';
+}
 (function initLocalStorage() {
 	var idealLocalStorage = {
 		darkSquareColor: "#555555",
@@ -49,6 +55,11 @@ function activateMaterial() {
 		y = e.clientY - cRect.top - ripple.offsetHeight / 2;
 		ripple.style.top = y + 'px';
 		ripple.style.left = x + 'px';
+		if (isSafari) {
+			ripple.onmouseup = ripple.ontouchend = ripple.onclick = function() {
+				ripple.parentNode.click();
+			};
+		}
 		ripple.classList.add('animate');
 	});
 }
@@ -73,7 +84,7 @@ addEventListener('load', function() {
 					this.children[i].classList.toggle("open");
 				}
 			}
-			var options = 3;
+			var options = 4;
 			for (var i=1;i<=options;i++) {
 				document.getElementById("option-"+i).classList.toggle("open");
 			}
@@ -87,6 +98,18 @@ addEventListener('load', function() {
 			CVDismissAlert();
 		}
 	});
+	if (location.pathname == '/') {
+		var chatBox = document.getElementById('msg-input');
+		chatBox.onkeyup = function(e) {
+			var keyCode = e.keyCode || e.which || e.charCode;
+			if (keyCode == 13) {
+				if (! /^\s*$/.test(this.value)) {
+					socket.send('message:'+this.value);
+					this.value = '';
+				}
+			}
+		};
+	}
 	// End onload
 });
 function CVAlert(content, buttons, defaultButton) {
@@ -121,7 +144,7 @@ function CVCreateGame() {
 	<select id='variant'>\
 		<option value='normal'>Standard</option>\
 		<option value='atomic'>Atomic</option>\
-		<option value='race-kings'>Racing Kings</option>\
+		<option value='race-kings'>Racing kings</option>\
 		<option value='fischer-random'>Fischer random</option>\
 		<option value='crazyhouse'>Crazyhouse</option>\
 		<option value='suicide'>Suicide</option>\
@@ -131,7 +154,6 @@ function CVCreateGame() {
 		<option value='cheshire-cat'>Cheshire cat</option>\
 		<option value='annihilation'>Annihilation</option>\
 		<option value='gryphon'>Gryphon chess</option>\
-		<option value='cornerless'>Cornerless</option>\
 		<option value='mutation'>Mutation</option>\
 		<option value='bomb'>Bomb chess</option>\
 	</select>\
@@ -171,23 +193,30 @@ function CVCreateGame() {
 		document.getElementById("minutes").onchange = function() { document.getElementById("display-minutes").innerHTML = this.value+"min"; };
 	}, 200);
 }
-var suppressOfflineMessages = false;
-setInterval(function() {
-	if (!navigator.onLine && !suppressOfflineMessages) {
-		CVAlert("<h3>Network Error</h3><p>We are unable to connect to the Chessvars server. Please check your internet connection.</p>")
-		onAlertDismiss = function() {
-			suppressOfflineMessages = true;
-		};
-	}
-}, 2000);
 function CVAcceptGame(gameId) {
 	socket.send("acceptgame:"+gameId)
+}
+function CVSpectateGame(gameId) {
+	location.href = '/g/'+gameId;
 }
 var onAlertDismiss = function() { console.log("No action taken on alert dismiss. (default)"); };
 var socket = new WebSocket("ws://"+location.host+"/socket");
 var socketSend = socket.send;
 socket.send = function() {
-	socketSend.apply(this, arguments);
+	socketSend.apply(this, arguments); // debug if necessary
+};
+var suppressOfflineMessages = false;
+socket.onclose = function() {
+	if (location.pathname == '/choose_username') return;
+	setTimeout(function() { // wait 3 seconds, no need to have this pop up when users exit the page
+		CVAlert("<h3>Network Error</h3><p>We are unable to connect to the Chessvars server. Please check your internet connection. If you think your internet connection is working, click reconnect.</p>", ["Cancel", "Reconnect"]);
+		onAlertDismiss = function(result) {
+			if (result == 'Reconnect') {
+				location.reload();
+			}
+			suppressOfflineMessages = true;
+		};
+	}, 3000);
 };
 socket.onmessage = function(received) {
 	function switch_bw(c) {
@@ -196,17 +225,17 @@ socket.onmessage = function(received) {
 		return c;
 	}
 	var msg = received.data;
-	console.log("Received WS data: "+msg);
+	console.log(msg);
 	var msgargs = msg.split(":");
 	if (msgargs[0] == "newgame") {
 		var word = (msgargs[7] == "owned") ? "Withdraw" : "Accept";
 		var playAs = (msgargs[7] == "owned") ? switch_bw(msgargs[5]) : msgargs[5];
-		document.getElementById("games-tbody").innerHTML += "<tr id='game-id-"+msgargs[6]+"'></td><td>"+msgargs[1]+"</td><td>"+msgargs[2]+"</td><td>"+msgargs[3]+"min + "+msgargs[4]+"sec</td><td>"+playAs+"</td><td><button raised material button onclick='CVAcceptGame(\""+msgargs[6]+"\")'>"+word+" Game</button></td></tr>";
+		document.getElementById("offers-tbody").innerHTML += "<tr id='offer-id-"+msgargs[6]+"'><td>"+msgargs[1]+"</td><td>"+msgargs[2]+"</td><td>"+msgargs[3]+" + "+msgargs[4]+"</td><td>"+playAs+"</td><td><button raised material button onclick='CVAcceptGame(\""+msgargs[6]+"\")'>"+word+" game</button></td></tr>";
 		activateMaterial();
 	}
 	if (msgargs[0] == "withdrawgame") {
 		try {
-			var elt = document.getElementById("game-id-"+msgargs[1]);
+			var elt = document.getElementById("offer-id-"+msgargs[1]);
 			elt.parentNode.removeChild(elt);
 		}catch(err) {}
 	}
@@ -214,7 +243,10 @@ socket.onmessage = function(received) {
 		CVAlert(msgargs[1])
 	}
 	if (msgargs[0] == "gameaccepted" || msgargs[0] == "gameready") {
-		location.replace( "/g/"+msgargs[1] );
+		location.href = "/g/"+msgargs[1];
+	}
+	if (msgargs[0] == "gameconclusion") {
+		CVGameConclusion(msgargs[1], msgargs[2], msgargs[3]);
 	}
 	if (msgargs[0] == "fen") {
 		try {
@@ -229,6 +261,38 @@ socket.onmessage = function(received) {
 		}catch(err) {
 			console.log(err);
 			console.log('CVGameMessage not defined');
+		}
+	}
+	if (msgargs[0] == "takebackoffer") {
+		CVTakebackOffer();
+	}
+	if (msgargs[0] == "drawdecline") {
+		CVDrawDecline();
+	}
+	if (msgargs[0] == "takeback") {
+		CVTakeback();
+	}
+	if (msgargs[0] == "drawoffer") {
+		CVDrawOffer();
+	}
+	if (msgargs[0] == "popmessage" && location.pathname == '/') {
+		var article = document.getElementById('chat-card').children[1];
+		article.parentNode.removeChild(article);
+	}
+	if (msgargs[0] == "message" && location.pathname == '/') {
+		var article = document.createElement('article');
+		article.innerHTML = msg.slice(8, msg.length);
+		var msgInput = document.getElementById('spacer');
+		msgInput.parentNode.insertBefore(article, msgInput);
+	}
+	if (msgargs[0] == "ongoinggame" && location.pathname == '/') {
+		document.getElementById('games-tbody').innerHTML += '<tr id="game-id-'+msgargs[1]+'"><td>'+msgargs[2]+'</td><td>'+msgargs[3]+'</td><td><button material raised onclick="CVSpectateGame(\''+msgargs[1]+'\')">Spectate game</button></td></tr>';
+		activateMaterial();
+	}
+	if (msgargs[0] == "ongoinggamefinished" && location.pathname == '/') {
+		var elt = document.getElementById('game-id-'+msgargs[1]);
+		if (elt) {
+			elt.parentNode.removeChild(elt);
 		}
 	}
 };
