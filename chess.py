@@ -301,7 +301,7 @@ def index():
 			'''+str(tablify_game_offers(uname))+'''
 			</tbody>
 			<tfoot>
-			<tr><td colspan="5"><button raised material button onclick="CVCreateGame()">Create a game...</button></td></tr>
+			<tr><td colspan="5"><button raised material button onclick="CVCreateGame()">Create a game...</button><button raised material onclick="CVCreateGame(true)">Challenge a player...</button></td></tr>
 			</tfoot>
 			</table>
 		</div>
@@ -623,12 +623,12 @@ def socket():
 							pass # Takeback spammer!
 					elif msg_args[1] == 'draw' and not_spectator:
 						if game.draw_offeror and game.draw_offeror != logged_in_users[new_session_token].username:
-							socket.send('gameconclusion:<draw>:<draw>')
+							socket.send('gameconclusion:<draw>:<draw>:agreement')
 							game.draw_offeror = ''
 							if logged_in_users[new_session_token].username == game.white_player:
-								broadcast_to('gameconclusion:<draw>:<draw>', get_token_by_username(game.black_player))
+								broadcast_to('gameconclusion:<draw>:<draw>:agreement', get_token_by_username(game.black_player))
 							elif logged_in_users[new_session_token].username == game.black_player:
-								broadcast_to('gameconclusion:<draw>:<draw>', get_token_by_username(game.white_player))
+								broadcast_to('gameconclusion:<draw>:<draw>:agreement', get_token_by_username(game.white_player))
 							else:
 								pass # Player is in a game but not white or black? Weird. Possibly hacking
 							print 'deleted game: draw'
@@ -681,34 +681,36 @@ def game_page_func(game_id):
 			msgs = ''.join(game.spectator_msgs)
 		return main_page_wrap(game_page.format(white_player=game.white_player, black_player=game.black_player, username=uname, opponent_username=opponent, variant=game.variant, msgs=msgs, hamburger_menu=hamburger_menu, is_spectating=spectating))
 	except KeyError:
-		return main_page_wrap('''<h2>Game unavailable</h2><p>Sorry, this game is no longer available. This could be caused by a slow internet connection or by a bug in our server.</p>''', True)
+		return main_page_wrap('''<h2>Game unavailable</h2><p>Sorry, this game is no longer available. This could be caused by a slow internet connection or by a bug in our server.</p>'''+hamburger_menu, True)
+cwd = os.getcwd()
+print 'CWD: '+cwd
 @app.route('/favicon.ico')
 def get_favicon():
-	return static_file("cv-favicon.ico", root="/Users/rmoore/code/resources")
+	return static_file("cv-favicon.ico", root=cwd+"/resources")
 @app.route('/main.css')
 def get_main_css():
-	return static_file("main.css", root="/Users/rmoore/code")
+	return static_file("main.css", root=cwd)
 @app.route('/main.js')
 def get_main_js():
-	return static_file("main.js", root="/Users/rmoore/code")
+	return static_file("main.js", root=cwd)
 @app.route('/game.js')
 def get_game_js():
-	return static_file("game.js", root="/Users/rmoore/code")
+	return static_file("game.js", root=cwd)
 @app.route('/resources/<resource>')
 def get_resource(resource):
-	return static_file(resource, root="/Users/rmoore/code/resources")
+	return static_file(resource, root=cwd+"/resources")
 @app.error(404)
 def error_404(error):
 	return main_page_wrap('''
 		<h2>Page not found (404)</h2>
 		<p>This page was not found (it may have moved). Sorry.</p>
-		''', True)
+		'''+hamburger_menu, True)
 @app.error(500)
 def error_500(error):
 	return main_page_wrap('''
 		<h2>Internal server error (500)</h2>
 		<p>Our server got an internal error; the developer will be notified.</p>
-		''', True)
+		'''+hamburger_menu, True)
 def debug_manually():
 	print "-----------------------------------"
 	for session_token in logged_in_users:
