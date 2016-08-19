@@ -136,10 +136,12 @@ function CVDismissAlert(result) {
 	var noClear = onAlertDismiss(result);
 	if (!noClear) { onAlertDismiss = function(){}; }
 }
-function CVCreateGame() {
+function CVCreateGame(isChallenge) {
 	var text = "\
 	<!--div style='width: 100%; text-align: center'-->\
 	<form>\
+	"+(isChallenge ? "<h3>Player to challenge</h3>\
+	<input type='text' id='to-challenge'/>" : "")+"
 	<h3>Variant</h3>\
 	<select id='variant'>\
 		<option value='normal'>Standard</option>\
@@ -157,8 +159,6 @@ function CVCreateGame() {
 		<option value='mutation'>Mutation</option>\
 		<option value='bomb'>Bomb chess</option>\
 	</select>\
-	<h3>Variant description</h3>\
-	<p>Standard chess: normal chess rules.</p>\
 	<h3>Time control</h3>\
 	<table>\
 	<tr><td>Minutes:</td><td><input id='minutes' value='5' type='range' min='1' max='60'/></td><td id='display-minutes'>5min</td></tr>\
@@ -183,7 +183,17 @@ function CVCreateGame() {
 					playAs = radioButtons[i].value;
 				}
 			}
-			socket.send("creategame:"+variant+":"+minutes+":"+delay+":"+playAs);
+			if (isChallenge) {
+				var playerToChallenge = document.getElementById('to-challenge');
+				if (playerToChallenge && /^[a-zA-Z0-9\s]+$/.test(playerToChallenge.value)) {
+					playerToChallenge = playerToChallenge.value;
+					socket.send("challengeplayer:"+playerToChallenge+":"+variant+":"+minutes+":"+delay+":"+playAs)
+				}else{
+					CVAlert("<h3>Invalid input</h3><p>Player to challenge field is empty or is an invalid username.</p>");
+				}
+			}else{
+				socket.send("creategame:"+variant+":"+minutes+":"+delay+":"+playAs);
+			}
 		}
 	};
 	setTimeout(function() {
