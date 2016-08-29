@@ -1,6 +1,8 @@
 #!/usr/bin/python
 
 # To do:
+# Fix chat section scrolling CSS
+# Program chess clocks (probably with datetimes)
 
 DEBUG = False
 NORMAL = 0
@@ -164,6 +166,7 @@ class LoggedInUser:
 		self.sockets = []
 		self.session_token = session_token # for quick reference by logged_in_users[self.session_token]
 		self.game_id = None
+		self.silenced = False
 	def logout(self, force=True):
 		if force or len(self.sockets) == 0:
 			if self.game_id in games:
@@ -301,7 +304,7 @@ def index():
 			'''+str(tablify_game_offers(uname))+'''
 			</tbody>
 			<tfoot>
-			<tr><td colspan="5"><button raised material button onclick="CVCreateGame()">Create a game...</button><button raised material onclick="CVCreateGame(true)">Challenge a player...</button></td></tr>
+			<tr><td colspan="5"><button raised material button onclick="CVCreateGame()">Create a game...</button></td></tr>
 			</tfoot>
 			</table>
 		</div>
@@ -492,13 +495,20 @@ def socket():
 			if msg_args[0] == 'message':
 				global messages
 				sender = logged_in_users[new_session_token].username
-				msg = escape(':'.join(msg_args[1:]))
-				msg = '<b class="message">'+sender+'</b> '+msg
-				messages.append(msg)
-				broadcast_to('message:'+msg, 'all')
-				if len(messages) > 25:
-					broadcast_to('popmessage', 'all')
-					messages = messages[1:]
+				if not logged_in_users[new_session_token].silenced:
+					msg = escape(':'.join(msg_args[1:]))
+					msg = '<b class="message">'+sender+'</b> '+msg
+					messages.append(msg)
+					broadcast_to('message:'+msg, 'all')
+					if len(messages) > 25:
+						broadcast_to('popmessage', 'all')
+						messages = messages[1:]
+					logged_in_users[new_session_token].silenced = True
+					def unsilence():
+						logged_in_users[new_session_token].silenced = False
+					t = Timer(3, unsilence) # you can send one message every three seconds
+					t.daemon = True
+					t.start()
 			if msg_args[0] == 'game':
 				if logged_in_users[new_session_token].game_id in games:
 					# There's a game here for sure
@@ -681,36 +691,34 @@ def game_page_func(game_id):
 			msgs = ''.join(game.spectator_msgs)
 		return main_page_wrap(game_page.format(white_player=game.white_player, black_player=game.black_player, username=uname, opponent_username=opponent, variant=game.variant, msgs=msgs, hamburger_menu=hamburger_menu, is_spectating=spectating))
 	except KeyError:
-		return main_page_wrap('''<h2>Game unavailable</h2><p>Sorry, this game is no longer available. This could be caused by a slow internet connection or by a bug in our server.</p>'''+hamburger_menu, True)
-cwd = os.getcwd()
-print 'CWD: '+cwd
+		return main_page_wrap('''<h2>Game unavailable</h2><p>Sorry, this game is no longer available. This could be caused by a slow internet connection or by a bug in our server.</p>''', True)
 @app.route('/favicon.ico')
 def get_favicon():
-	return static_file("cv-favicon.ico", root=cwd+"/resources")
+	return static_file("cv-favicon.ico", root="/Users/rmoore/code/resources")
 @app.route('/main.css')
 def get_main_css():
-	return static_file("main.css", root=cwd)
+	return static_file("main.css", root="/Users/rmoore/code")
 @app.route('/main.js')
 def get_main_js():
-	return static_file("main.js", root=cwd)
+	return static_file("main.js", root="/Users/rmoore/code")
 @app.route('/game.js')
 def get_game_js():
-	return static_file("game.js", root=cwd)
+	return static_file("game.js", root="/Users/rmoore/code")
 @app.route('/resources/<resource>')
 def get_resource(resource):
-	return static_file(resource, root=cwd+"/resources")
+	return static_file(resource, root="/Users/rmoore/code/resources")
 @app.error(404)
 def error_404(error):
 	return main_page_wrap('''
 		<h2>Page not found (404)</h2>
 		<p>This page was not found (it may have moved). Sorry.</p>
-		'''+hamburger_menu, True)
+		''', True)
 @app.error(500)
 def error_500(error):
 	return main_page_wrap('''
 		<h2>Internal server error (500)</h2>
 		<p>Our server got an internal error; the developer will be notified.</p>
-		'''+hamburger_menu, True)
+		''', True)
 def debug_manually():
 	print "-----------------------------------"
 	for session_token in logged_in_users:
