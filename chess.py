@@ -4,7 +4,7 @@
 # Fix chat section scrolling CSS
 # Program chess clocks (probably with datetimes)
 
-DEBUG = False
+DEBUG = True
 NORMAL = 0
 CHECK = 1
 CHECKMATE = 2
@@ -15,8 +15,8 @@ import Chessnut
 from bottle import request, response, redirect, Bottle, abort, static_file, debug
 from random import choice
 import re
-from gevent_websocket.geventwebsocket import WebSocketError
-from gevent_websocket.geventwebsocket.handler import WebSocketHandler
+from geventwebsocket import WebSocketError
+from geventwebsocket.handler import WebSocketHandler
 from gevent.pywsgi import WSGIServer
 from threading import Timer
 app = Bottle()
@@ -53,7 +53,7 @@ def main_page_wrap(html, is_simple=False, css=''):
 		'''+('<div class="layout-card" z="1">' if is_simple else '')+html+('</div>' if is_simple else '')+'''
 		</div>
 		<div id="modal-overlay" class="inactive"></div>
-		<div id="modal-dialog" class="inactive"><div id="modal-dialog-wrapper">
+		<div id="modal-dialog" class="inactive" z="5"><div id="modal-dialog-wrapper">
 			<div id="modal-dialog-content"></div>
 			<table id="modal-dialog-dismiss-buttons"><tbody><tr id="modal-dialog-dismiss-row"><td>OK</td></tr></tbody></table>
 		</div>
@@ -202,13 +202,6 @@ def tablify_games():
 		black_player = games[i].black_player
 		rows += '<tr id="game-id-'+games[i].game_id+'"><td>'+white_player+' vs. '+black_player+'</td><td>'+games[i].variant+'</td><td><button material raised onclick="CVSpectateGame(\''+games[i].game_id+'\')">Spectate game</button></td></tr>'
 	return rows
-def tablify_game_offers(username):
-	rows = ''
-	for i in range(len(game_offers)):
-		word = 'Withdraw' if username == game_offers[i].offered_by else 'Accept'
-		clr = game_offers[i].play_as if username == game_offers[i].offered_by else switch_bw(game_offers[i].play_as)
-		rows += "<tr id='offer-id-"+game_offers[i].game_id+"'><td>"+game_offers[i].offered_by+"</td><td>"+game_offers[i].variant+"</td><td>"+game_offers[i].minutes+" + "+game_offers[i].delay+"</td><td>"+clr+"</td><td><button material raised onclick=\"CVAcceptGame('"+game_offers[i].game_id+"')\">"+word+" game</button></td></tr>"
-	return rows
 readable_variants = {
 	'normal': 'Standard',
 	'race-kings': 'Racing kings',
@@ -225,6 +218,13 @@ readable_variants = {
 	'mutation': 'Mutation',
 	'bomb': 'Bomb chess'
 }
+def tablify_game_offers(username):
+	rows = ''
+	for i in range(len(game_offers)):
+		word = 'Withdraw' if username == game_offers[i].offered_by else 'Accept'
+		clr = game_offers[i].play_as if username == game_offers[i].offered_by else switch_bw(game_offers[i].play_as)
+		rows += "<tr id='offer-id-"+game_offers[i].game_id+"'><td>"+game_offers[i].offered_by+"</td><td>"+game_offers[i].variant+"</td><td>"+game_offers[i].minutes+" + "+game_offers[i].delay+"</td><td>"+clr+"</td><td><button material raised onclick=\"CVAcceptGame('"+game_offers[i].game_id+"')\">"+word+" game</button></td></tr>"
+	return rows
 def get_token_by_socket(socket):
 	for token in logged_in_users:
 		if token_has_socket(token, socket):
@@ -304,13 +304,15 @@ def index():
 			'''+str(tablify_game_offers(uname))+'''
 			</tbody>
 			<tfoot>
-			<tr><td colspan="5"><button raised material button onclick="CVCreateGame()">Create a game...</button></td></tr>
+			<tr><td colspan="5"><button raised material colored button onclick="CVCreateGame()">Create a game...</button><button raised material onclick="CVCreateGame(true)">Challenge a player...</button></td></tr>
 			</tfoot>
 			</table>
 		</div>
 		<div class="layout-card" z="1" id="chat-card">
 			<h2>Chat</h2>
-			<article>'''+'</article><article>'.join(messages)+'''</article>
+			<div id='msg-box' style='max-height: 200px; margin: -15px; padding: 15px' class='allow-scroll'>
+				<article>'''+'</article><article>'.join(messages)+'''</article>
+			</div>
 			<div id='spacer' style='height: 38px'/>
 			<input id="msg-input" type="text" placeholder="Message people on server"/>
 		</div>
@@ -416,15 +418,16 @@ def view_people():
 @app.route('/blankpage')
 def blank_page():
 	return main_page_wrap('''<h2>Easter Egg!</h2>You have just found a rather un-exciting easter egg on Chessvars courtesy of the developer''', True)
-"""@app.route('/validate_username')
+'''@app.route('/validate_username')
 def validate_username():
-	return 'invalid' if (request.query['name'] in [logged_in_users[session_token].username for session_token in logged_in_users]) else 'valid'"""
+	return 'invalid' if (request.query['name'] in [logged_in_users[session_token].username for session_token in logged_in_users]) else 'valid' '''
 @app.route('/socket')
 @username_required
 def socket():
 	socket = request.environ.get('wsgi.websocket')
 	if not socket:
 		abort(400, "Expected WebSocket request.")
+		print 'Socket request aborted.'
 	initial_session_token = request.get_cookie("session_token")
 	logged_in_users[initial_session_token].sockets.append(socket)
 	if logged_in_users[initial_session_token].game_id in games:
@@ -503,7 +506,7 @@ def socket():
 					if len(messages) > 25:
 						broadcast_to('popmessage', 'all')
 						messages = messages[1:]
-					logged_in_users[new_session_token].silenced = True
+					#logged_in_users[new_session_token].silenced = True
 					def unsilence():
 						logged_in_users[new_session_token].silenced = False
 					t = Timer(3, unsilence) # you can send one message every three seconds
@@ -572,10 +575,10 @@ def socket():
 						msg_content = escape(msg_content) # XSS protection
 						msg_sender = logged_in_users[new_session_token].username
 						if is_spectator:
-							game.spectator_msgs.append('<article><span style="color: #FFAB00;">['+msg_sender+']</span> '+msg_content+'</article>')
+							game.spectator_msgs.append('<article><b class="message">['+msg_sender+']</b> '+msg_content+'</article>')
 							broadcast_to('gamemessage:'+msg_sender+':'+msg_content, game.spectators)
 						else:
-							game.msgs.append('<article><span style="color: #FFAB00;">['+msg_sender+']</span> '+msg_content+'</article>')
+							game.msgs.append('<article><b class="message">['+msg_sender+']</b> '+msg_content+'</article>')
 							socket.send('gamemessage:'+msg_sender+':'+msg_content)
 							if logged_in_users[new_session_token].username == game.white_player:
 								broadcast_to('gamemessage:'+msg_sender+':'+msg_content, get_token_by_username(game.black_player))
@@ -656,10 +659,10 @@ def socket():
 				else:
 					pass # They're sending game moves without a game. Suspicious? Maybe, but possibly just a laggy internet or glitch.
 		except WebSocketError as e:
-			for i in xrange(len(logged_in_users[new_session_token].sockets)-1, -1, -1):
-				if logged_in_users[new_session_token].sockets[i] is socket:
-					del logged_in_users[new_session_token].sockets[i]
-			logged_in_users[new_session_token].on_socket_close()
+			for i in xrange(len(logged_in_users[initial_session_token].sockets)-1, -1, -1):
+				if logged_in_users[initial_session_token].sockets[i] is socket:
+					del logged_in_users[initial_session_token].sockets[i]
+			logged_in_users[initial_session_token].on_socket_close()
 			abort(400, "Connection closed.")
 @app.route('/g/<game_id>')
 @username_required
