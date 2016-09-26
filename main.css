@@ -352,11 +352,11 @@ form input, form button {
 	transform: translate(-50%, -30%);
 	-webkit-transform: translate(-50%, -30%);
 	-ms-transform: translate(-50%, -30%);
-	background: #3F51B5;
+	background: #EEEEEE;
 	width: 50%;
 	height: 50%;
 	transition-duration: 0.3s;
-	border-radius: 5px 5px 10px 10px;
+	border-radius: 3px;
 	box-sizing: border-box;
 	padding: 0;
 	max-height: 500px;
@@ -421,14 +421,14 @@ form input, form button {
 	text-align: center;
 	margin: 0;
 	cursor: pointer;
-	background: rgba(255, 255, 255, 0.2);
+	background: rgba(0, 0, 0, 0.1);
 	transition-duration: 0.3s;
 }
 #modal-dialog-dismiss-row td.default-button {
 	text-decoration: underline;
 }
 #modal-dialog-dismiss-row td:hover {
-	background: rgba(255, 255, 255, 0.3);
+	background: rgba(0, 0, 0, 0.15);
 }
 #modal-dialog-wrapper {
 	position: relative;
@@ -592,4 +592,39 @@ input[name='settings'] { /* "settings" is actually a honeypot */
 	flex: 1;
 	display: table-cell;
 	background: #EEEEEE;
+}
+select {
+	border: 2px solid silver;
+	outline: none;
+}
+select:focus, select:active {
+	border: 2px solid #FFD740;
+}
+input[type='radio'] {
+	display: none;
+}
+input[type='radio'] + label:before {
+	content: '';
+	width: 1em;
+	height: 1em;
+	background: #AAAAAA;
+	display: inline-block;
+	border-radius: 0.5em;
+	vertical-align: top;
+	margin-right: 0.2em;
+	transition-duration: 0.3s;
+}
+input[type='radio']:checked + label:before {
+	background: #FFD740;
+	box-shadow: 0 0 0 0.25em #FFAB00 inset;
+}
+::-webkit-scrollbar-track {
+	background-color: rgba(0, 0, 0, 0.1);
+}
+::-webkit-scrollbar {
+	width: 7px;
+	background-color: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: #3F51B5;
 }

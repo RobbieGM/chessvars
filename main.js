@@ -141,7 +141,7 @@ function CVCreateGame(isChallenge) {
 	<!--div style='width: 100%; text-align: center'-->\
 	<form>\
 	"+(isChallenge ? "<h3>Player to challenge</h3>\
-	<input type='text' id='to-challenge'/>" : "")+"
+	<input type='text' id='to-challenge'/>" : "")+"\
 	<h3>Variant</h3>\
 	<select id='variant'>\
 		<option value='normal'>Standard</option>\
@@ -165,14 +165,14 @@ function CVCreateGame(isChallenge) {
 	<tr><td>Delay:</td><td><input id='delay' value='8' type='range' min='0' max='30'/></td><td id='display-seconds'>8sec</td></tr>\
 	</table>\
 	<h3>Play as</h3>\
-	<input type='radio' name='play-as' value='random' checked /> Random color<br/>\
-	<input type='radio' name='play-as' value='white' /> White<br/>\
-	<input type='radio' name='play-as' value='black' /> Black<br/>\
+	<input type='radio' name='play-as' value='random' id='play-as-random' checked /> <label for='play-as-random'>Random color</label><hr style='height: 0.5em; margin: 0; visibility: hidden'/>\
+	<input type='radio' name='play-as' value='white' id='play-as-white' /> <label for='play-as-white'>White</label><hr style='height: 0.5em; margin: 0; visibility: hidden'/>\
+	<input type='radio' name='play-as' value='black' id='play-as-black' /> <label for='play-as-black'>Black</label>\
 	</form>\
 	<!--/div-->";
-	CVAlert(text, ["Cancel", "Create Game"], "Create Game");
+	CVAlert(text, ["Cancel", "Create game"], "Create game");
 	onAlertDismiss = function(result) {
-		if (result == "Create Game") {
+		if (result == "Create game") {
 			var variant = document.getElementById("variant").value;
 			var minutes = document.getElementById("minutes").value;
 			var delay   = document.getElementById("delay").value;
@@ -286,14 +286,15 @@ socket.onmessage = function(received) {
 		CVDrawOffer();
 	}
 	if (msgargs[0] == "popmessage" && location.pathname == '/') {
-		var article = document.getElementById('chat-card').children[1];
+		var article = document.getElementById('msg-box').children[1];
 		article.parentNode.removeChild(article);
 	}
 	if (msgargs[0] == "message" && location.pathname == '/') {
 		var article = document.createElement('article');
 		article.innerHTML = msg.slice(8, msg.length);
-		var msgInput = document.getElementById('spacer');
-		msgInput.parentNode.insertBefore(article, msgInput);
+		var msgBox = document.getElementById('msg-box');
+		msgBox.appendChild(article);
+		msgBox.scrollTop = msgBox.scrollHeight;
 	}
 	if (msgargs[0] == "ongoinggame" && location.pathname == '/') {
 		document.getElementById('games-tbody').innerHTML += '<tr id="game-id-'+msgargs[1]+'"><td>'+msgargs[2]+'</td><td>'+msgargs[3]+'</td><td><button material raised onclick="CVSpectateGame(\''+msgargs[1]+'\')">Spectate game</button></td></tr>';

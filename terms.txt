@@ -10,6 +10,9 @@ We strongly advise you to read the terms and conditions and privacy policies of 
 <h3>Termination</h3>\
 We may terminate or suspend access to our Service immediately, without prior notice or liability, for any reason whatsoever, including without limitation if you breach the Terms.<br/>\
 All provisions of the Terms which by their nature should survive termination shall survive termination, including, without limitation, ownership provisions, warranty disclaimers, indemnity and limitations of liability.<br/>\
+<h3>Cookie Policy</h3>\
+Our Service uses cookies and requires them to function properly. We will, however, never use them to track you or show advertisements.<br/>\
+If you have cookies disabled in your browser, please enable them for this website.<br/>\
 <h3>Governing Law</h3>\
 These Terms shall be governed and construed in accordance with the laws of Michigan, United States, without regard to its conflict of law provisions.<br/>\
 Our failure to enforce any right or provision of these Terms will not be considered a waiver of those rights. If any provision of these Terms is held to be invalid or unenforceable by a court, the remaining provisions of these Terms will remain in effect. These Terms constitute the entire agreement between us regarding our Service, and supersede and replace any prior agreements we might have between us regarding the Service.<br/>\
