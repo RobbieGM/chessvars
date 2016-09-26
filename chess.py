@@ -3,6 +3,7 @@
 # To do:
 # Fix chat section scrolling CSS
 # Program chess clocks (probably with datetimes)
+# update test?
 
 DEBUG = True
 NORMAL = 0
