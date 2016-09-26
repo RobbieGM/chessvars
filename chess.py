@@ -695,21 +695,22 @@ def game_page_func(game_id):
 		return main_page_wrap(game_page.format(white_player=game.white_player, black_player=game.black_player, username=uname, opponent_username=opponent, variant=game.variant, msgs=msgs, hamburger_menu=hamburger_menu, is_spectating=spectating))
 	except KeyError:
 		return main_page_wrap('''<h2>Game unavailable</h2><p>Sorry, this game is no longer available. This could be caused by a slow internet connection or by a bug in our server.</p>''', True)
+cwd = os.getcwd()
 @app.route('/favicon.ico')
 def get_favicon():
-	return static_file("cv-favicon.ico", root="/Users/rmoore/code/resources")
+	return static_file("cv-favicon.ico", root=cwd)
 @app.route('/main.css')
 def get_main_css():
-	return static_file("main.css", root="/Users/rmoore/code")
+	return static_file("main.css", root=cwd)
 @app.route('/main.js')
 def get_main_js():
-	return static_file("main.js", root="/Users/rmoore/code")
+	return static_file("main.js", root=cwd)
 @app.route('/game.js')
 def get_game_js():
-	return static_file("game.js", root="/Users/rmoore/code")
+	return static_file("game.js", root=cwd)
 @app.route('/resources/<resource>')
 def get_resource(resource):
-	return static_file(resource, root="/Users/rmoore/code/resources")
+	return static_file(resource, root=cwd+"/resources")
 @app.error(404)
 def error_404(error):
 	return main_page_wrap('''
