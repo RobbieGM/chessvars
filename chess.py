@@ -1,9 +1,7 @@
 #!/usr/bin/python
 
 # To do:
-# Fix chat section scrolling CSS
 # Program chess clocks (probably with datetimes)
-# update test?
 
 DEBUG = True
 NORMAL = 0
@@ -132,10 +130,9 @@ class Game:
 		self.moves = []
 		self.draw_offeror = ''
 		self.spectators = []
-		self.clock = {
-			'white_seconds': minutes * 60,
-			'black_seconds': minutes * 60
-		}
+		self.last_move_date = datetime.now()
+		self.white_seconds_remaining = minutes * 60
+		self.black_seconds_remaining = minutes * 60
 		self.move_history = ['newboard']
 	def terminate(self, disconnector_token=''):
 		for session_token in logged_in_users:
@@ -525,6 +522,11 @@ def socket():
 							if not msg_args[2] in game.cn_game.get_moves():
 								raise Chessnut.game.InvalidMove
 							if (game.cn_game.state.player == 'w' and logged_in_users[new_session_token].username == game.white_player) or (game.cn_game.state.player == 'b' and logged_in_users[new_session_token].username == game.black_player):
+								seconds = (datetime.now() - game.last_move_date).seconds
+								if game.state.player == 'w':
+									game.white_seconds_remaining -= seconds
+								else:
+									game.white_seconds_remaining -= seconds
 								game.cn_game.apply_move(msg_args[2])
 								game.move_history.append(msg_args[2])
 							else:
