@@ -3,7 +3,7 @@
 # To do:
 # Program chess clocks (probably with datetimes)
 
-DEBUG = True
+DEBUG = False
 NORMAL = 0
 CHECK = 1
 CHECKMATE = 2
@@ -117,6 +117,8 @@ class GameOffer:
 		self.offered_by_session = offered_by_session
 class Game:
 	def __init__(self, white_player, black_player, variant, minutes, delay, game_id):
+		minutes = int(minutes)
+		delay = int(delay)
 		self.white_player = white_player
 		self.black_player = black_player
 		self.variant = variant
@@ -232,7 +234,7 @@ def broadcast_to(message, recipients, from_token='FROM_SERVER', signify_owned=Fa
 	if DEBUG:
 		print "from_token: "+from_token
 		print "message: "+message
-		print "recipients: "+recipients
+		print "recipients: "+str(recipients)
 		print "signify_owned: "+str(signify_owned)
 	for session_token in logged_in_users:
 		if session_token in recipients or recipients == "all":
@@ -523,7 +525,11 @@ def socket():
 								raise Chessnut.game.InvalidMove
 							if (game.cn_game.state.player == 'w' and logged_in_users[new_session_token].username == game.white_player) or (game.cn_game.state.player == 'b' and logged_in_users[new_session_token].username == game.black_player):
 								seconds = (datetime.now() - game.last_move_date).seconds
-								if game.state.player == 'w':
+								seconds_after_minute = seconds % 60
+								minutes = (seconds - seconds_after_minute) / 60
+								game.last_move_date = datetime.now()
+								print 'seconds since last move: '+str(seconds)
+								if game.cn_game.state.player == 'w':
 									game.white_seconds_remaining -= seconds
 								else:
 									game.white_seconds_remaining -= seconds
